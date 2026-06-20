@@ -23,8 +23,9 @@ jobs:
       - name: Run reminder sweep
         env:
           DATABASE_URI: ${{ secrets.DATABASE_URI }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          CRON_NOTIFY_PLATFORM: telegram
-          CRON_NOTIFY_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Telegram is blocked in India — reminders route to Discord.
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          CRON_NOTIFY_PLATFORM: discord
+          CRON_NOTIFY_CHAT_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
         run: python -m cron.reminder_sweep

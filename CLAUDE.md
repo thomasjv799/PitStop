@@ -39,7 +39,7 @@ pytest                            # run tests
 
 ## Architecture notes
 
-- **Entry point:** `main.py` starts the Discord bot in a daemon thread and runs the Telegram bot on the main thread (blocking). Only bots whose token env vars are set are started.
+- **Entry point:** `main.py` runs the Discord bot on the main thread (blocking, required) and starts the Telegram bot in a daemon thread only when `ENABLE_TELEGRAM` is truthy. Telegram is disabled by default (blocked in India).
 - **Platform routing:** `bot/message.py` defines `Message(platform, user_id, chat_id, text)`. Both bot listeners normalise incoming messages to this dataclass before passing to the agent. Reply routing uses `msg.platform` + `msg.chat_id` — the agent is platform-agnostic.
 - **AI layer:** `GroqProvider` implements the `AIProvider` ABC. The LangGraph graph in `ai/graph.py` has nodes: `load_memory → agent → execute_tools → save_memory`. Tools are defined in `bot/functions.py`.
 - **Cron (`cron/reminder_sweep.py`):** Fires at offsets `[-7, -3, -1, 0, +1, +3, +7, +15, +30]` days relative to each document's expiry date. Each `(vehicle_id, expiry_field, expiry_date, trigger_offset)` is unique-constrained in `reminder_log` — if a row already exists the reminder was already sent. Renewing a document (changing the expiry date) naturally creates new rows with the new date, resetting the cycle.
@@ -51,17 +51,18 @@ pytest                            # run tests
 
 ```
 DATABASE_URI            postgresql://user:pass@localhost:5432/homelab
-TELEGRAM_BOT_TOKEN      from @BotFather
-TELEGRAM_CHAT_ID        your chat ID (cron alert target)
-DISCORD_BOT_TOKEN       optional
-DISCORD_CHANNEL_ID      optional — cron alert target for Discord
+DISCORD_BOT_TOKEN       required (primary transport)
+DISCORD_CHANNEL_ID      required — cron alert target for Discord
+ENABLE_TELEGRAM         1/true/yes to re-enable Telegram (default off; blocked in India)
+TELEGRAM_BOT_TOKEN      from @BotFather (only used when ENABLE_TELEGRAM set)
+TELEGRAM_CHAT_ID        your chat ID
 GROQ_API_KEY            from console.groq.com
 AI_PROVIDER             groq
-CRON_NOTIFY_PLATFORM    telegram | discord
+CRON_NOTIFY_PLATFORM    discord | telegram (default discord)
 CRON_NOTIFY_CHAT_ID     override for cron chat ID
 ```
 
 ## GitHub Actions
 
-- **Reminder Sweep** (`.github/workflows/reminder_sweep.yml`) — self-hosted runner, runs daily at 07:00 IST (01:30 UTC). Secrets: `DATABASE_URI`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+- **Reminder Sweep** (`.github/workflows/reminder_sweep.yml`) — self-hosted runner, runs daily at 07:00 IST (01:30 UTC). Routes to Discord. Secrets: `DATABASE_URI`, `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`.
 - `workflow_dispatch` is enabled — trigger manually from the GitHub Actions UI for testing.

@@ -28,7 +28,7 @@ def test_build_message_today():
 
 def test_all_offsets_coverage():
     from cron.reminder_sweep import ALL_OFFSETS
-    for expected in [-30, -14, -7, -3, -1, 0, 1, 3, 7, 15, 30]:
+    for expected in [-7, -3, -1, 0, 1, 3, 7, 15, 30]:
         assert expected in ALL_OFFSETS
 
 

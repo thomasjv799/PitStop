@@ -17,15 +17,18 @@ def main() -> None:
     _configure_logging()
     load_dotenv()
 
-    if os.environ.get("DISCORD_BOT_TOKEN"):
-        from bot.discord_bot import run_discord
-        threading.Thread(target=run_discord, name="discord-bot", daemon=True).start()
+    # Telegram is blocked in India; disabled by default. Set ENABLE_TELEGRAM to
+    # re-enable it as a secondary transport. Discord is the required primary.
+    enable_telegram = os.environ.get("ENABLE_TELEGRAM", "").lower() in ("1", "true", "yes")
 
-    if os.environ.get("TELEGRAM_BOT_TOKEN"):
+    if enable_telegram and os.environ.get("TELEGRAM_BOT_TOKEN"):
         from bot.telegram_bot import run_telegram
-        run_telegram()
-    else:
-        raise EnvironmentError("TELEGRAM_BOT_TOKEN is not set. Add it to .env.")
+        threading.Thread(target=run_telegram, name="telegram-bot", daemon=True).start()
+
+    if not os.environ.get("DISCORD_BOT_TOKEN"):
+        raise EnvironmentError("DISCORD_BOT_TOKEN is not set. Add it to .env.")
+    from bot.discord_bot import run_discord
+    run_discord()
 
 
 if __name__ == "__main__":
