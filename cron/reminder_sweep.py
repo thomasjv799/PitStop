@@ -42,8 +42,12 @@ def _build_message(vehicle: dict, label: str, expiry: date, remaining: int) -> s
 def sweep() -> int:
     today    = date.today()
     vehicles = db.get_all_vehicles_with_expiry()
-    platform = os.environ.get("CRON_NOTIFY_PLATFORM", "telegram")
-    chat_id  = os.environ.get("CRON_NOTIFY_CHAT_ID") or os.environ.get("TELEGRAM_CHAT_ID")
+    platform = os.environ.get("CRON_NOTIFY_PLATFORM", "discord")
+    chat_id  = (
+        os.environ.get("CRON_NOTIFY_CHAT_ID")
+        or os.environ.get("DISCORD_CHANNEL_ID")
+        or os.environ.get("TELEGRAM_CHAT_ID")
+    )
     sent = 0
 
     for v in vehicles:
