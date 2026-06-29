@@ -24,19 +24,23 @@ _FIELD_LABELS: dict[str, str] = {
 
 
 def _build_message(vehicle: dict, label: str, expiry: date, remaining: int) -> str:
-    name  = vehicle.get("nickname") or vehicle["registration_number"]
-    owner = vehicle.get("owner_name") or "Unknown"
-    if remaining < 0:
-        status = f"EXPIRED {-remaining} day(s) ago"
+    name = vehicle.get("nickname") or vehicle["registration_number"]
+    reg  = vehicle["registration_number"]
+    doc  = label.split(" / ")[0]          # short, friendly name e.g. "Fitness"
+    when = expiry.strftime("%d %b %Y")     # e.g. "30 Jun 2026"
+
+    if remaining < -1:
+        timing, closer = f"expired {-remaining} days ago, on {when}", "Please renew it as soon as you can."
+    elif remaining == -1:
+        timing, closer = f"expired yesterday, on {when}", "Please renew it as soon as you can."
     elif remaining == 0:
-        status = "expires TODAY"
+        timing, closer = f"is due today, {when}", "Time to get it renewed."
+    elif remaining == 1:
+        timing, closer = f"is due tomorrow, {when}", "Time to get it renewed."
     else:
-        status = f"in {remaining} day(s)"
-    return (
-        f"<b>Vehicle Reminder</b>\n"
-        f"{name} ({vehicle['registration_number']}) — {owner}\n"
-        f"{label}: {expiry}  ({status})"
-    )
+        timing, closer = f"is due in {remaining} days, on {when}", "Time to get it renewed."
+
+    return f"🚗 The {doc} for your {name} ({reg}) {timing}. {closer}"
 
 
 def sweep() -> int:

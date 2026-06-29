@@ -9,21 +9,23 @@ def test_build_message_days_before():
     expiry = date.today() + timedelta(days=3)
     msg = _build_message(v, "Insurance", expiry, 3)
     assert "Honda Highness" in msg
-    assert "in 3 day(s)" in msg
+    assert "due in 3 days" in msg
+    assert "<b>" not in msg  # no raw HTML — Discord renders it literally
 
 
 def test_build_message_expired():
     from cron.reminder_sweep import _build_message
     v = {"nickname": "Toyota Etios", "registration_number": "KL04AB6528", "owner_name": "Varghese Joseph"}
     msg = _build_message(v, "Fitness / RC validity", date.today() - timedelta(days=10), -10)
-    assert "EXPIRED 10 day(s) ago" in msg
+    assert "expired 10 days ago" in msg
+    assert "Fitness" in msg  # short doc name, not "Fitness / RC validity"
 
 
 def test_build_message_today():
     from cron.reminder_sweep import _build_message
     v = {"nickname": "Vespa", "registration_number": "KL04AF2342", "owner_name": "Varghese Joseph"}
     msg = _build_message(v, "Insurance", date.today(), 0)
-    assert "expires TODAY" in msg
+    assert "due today" in msg
 
 
 def test_all_offsets_coverage():
