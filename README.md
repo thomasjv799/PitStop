@@ -1,5 +1,5 @@
 # Smart Reminder System
-
+ 
 A self-hosted vehicle document expiry tracker. Sends escalating reminders via Telegram (and optionally Discord) before and after documents expire. Responds to natural language queries via an AI bot powered by Groq + LangGraph.
 
 ---
