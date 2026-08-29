@@ -38,7 +38,8 @@ def test_all_offsets_coverage():
 @patch("cron.reminder_sweep.db.log_reminder")
 @patch("cron.reminder_sweep.db.reminder_already_sent", return_value=False)
 @patch("cron.reminder_sweep.db.get_all_vehicles_with_expiry")
-def test_sweep_fires_at_trigger_day(mock_get, mock_sent, mock_log, mock_notify, monkeypatch):
+@patch("cron.reminder_sweep.db.is_snoozed", return_value=False)
+def test_sweep_fires_at_trigger_day(mock_snoozed, mock_get, mock_sent, mock_log, mock_notify, monkeypatch):
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
     today = date.today()
     expiry = today + timedelta(days=7)
@@ -58,7 +59,8 @@ def test_sweep_fires_at_trigger_day(mock_get, mock_sent, mock_log, mock_notify, 
 @patch("cron.reminder_sweep.notify")
 @patch("cron.reminder_sweep.db.reminder_already_sent", return_value=True)
 @patch("cron.reminder_sweep.db.get_all_vehicles_with_expiry")
-def test_sweep_skips_already_sent(mock_get, mock_sent, mock_notify, monkeypatch):
+@patch("cron.reminder_sweep.db.is_snoozed", return_value=False)
+def test_sweep_skips_already_sent(mock_snoozed, mock_get, mock_sent, mock_notify, monkeypatch):
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
     today = date.today()
     mock_get.return_value = [{
@@ -76,7 +78,8 @@ def test_sweep_skips_already_sent(mock_get, mock_sent, mock_notify, monkeypatch)
 @patch("cron.reminder_sweep.db.log_reminder")
 @patch("cron.reminder_sweep.db.reminder_already_sent", return_value=False)
 @patch("cron.reminder_sweep.db.get_all_vehicles_with_expiry")
-def test_sweep_catches_up_missed_trigger(mock_get, mock_sent, mock_log, mock_notify, monkeypatch):
+@patch("cron.reminder_sweep.db.is_snoozed", return_value=False)
+def test_sweep_catches_up_missed_trigger(mock_snoozed, mock_get, mock_sent, mock_log, mock_notify, monkeypatch):
     """Trigger was yesterday (day 6 remaining), still within 2-day catch-up window."""
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
     today = date.today()

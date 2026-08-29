@@ -1,9 +1,13 @@
+import atexit
 import logging
 import os
+import threading
+from contextlib import contextmanager
 from datetime import date
 from typing import Optional
 
 import psycopg2
+from psycopg2 import pool as pgpool
 from psycopg2 import sql as pgsql
 from psycopg2.extras import RealDictCursor
 
@@ -18,16 +22,22 @@ _ALLOWED_UPDATE_FIELDS = frozenset({
 })
 
 # An archived vehicle keeps its row but drops out of the fleet, the cron
-# sweep and the bot. `status` is free text on an externally-created table, so
-# match this value exactly and leave every other value — NULL included — alone.
-ARCHIVED = "archived"
-_NOT_ARCHIVED = "status IS DISTINCT FROM 'archived'"
+# sweep and the bot. `status` is NOT NULL DEFAULT 'ACTIVE' on the live table
+# and every existing row holds 'ACTIVE', so archiving writes 'ARCHIVED' to
+# match that convention and restoring writes 'ACTIVE' — never NULL, which
+# the NOT NULL constraint would reject. Compared case-insensitively so any
+# other value the VAHAN import may write still reads as live.
+ARCHIVED = "ARCHIVED"
+ACTIVE = "ACTIVE"
+_NOT_ARCHIVED = "upper(status) IS DISTINCT FROM 'ARCHIVED'"
 
 _VEHICLE_COLS = """
     id, nickname, registration_number, status, vehicle_class,
-    fuel_type, owner_name, registration_date,
+    fuel_type, emission_norms, model, manufacturer, rto, state,
+    owner_name, registration_date,
+    insurance_company, insurance_policy_no,
     insurance_valid_until, pucc_valid_until, fitness_valid_until,
-    mv_tax_valid_until, permit_valid_until, permit_type
+    mv_tax_valid_until, permit_type, permit_no, permit_valid_until
 """
 
 _ORDER_BY_NEAREST = """ORDER BY LEAST(
@@ -39,8 +49,61 @@ _ORDER_BY_NEAREST = """ORDER BY LEAST(
 )"""
 
 
+# Every helper below opens a connection, and against a managed Postgres in
+# another region that is a TCP+TLS handshake per query — a dashboard render
+# makes four. A small pool keeps them warm. It is created lazily so importing
+# this module never needs DATABASE_URI, and it is thread-safe because
+# main.py runs the bots in threads and uvicorn runs sync routes in a
+# threadpool.
+_POOL = None
+_POOL_LOCK = threading.Lock()
+
+
+def _get_pool():
+    global _POOL
+    if _POOL is None:
+        with _POOL_LOCK:
+            if _POOL is None:
+                _POOL = pgpool.ThreadedConnectionPool(
+                    minconn=int(os.getenv("DB_POOL_MIN", "1")),
+                    maxconn=int(os.getenv("DB_POOL_MAX", "8")),
+                    dsn=os.environ["DATABASE_URI"],
+                    connect_timeout=int(os.getenv("DB_CONNECT_TIMEOUT", "10")),
+                    application_name=os.getenv("DB_APP_NAME", "pitstop"),
+                )
+                logger.info("database pool opened")
+    return _POOL
+
+
+def close_pool() -> None:
+    """Release every pooled connection. Registered at exit; safe to call twice."""
+    global _POOL
+    with _POOL_LOCK:
+        if _POOL is not None:
+            _POOL.closeall()
+            _POOL = None
+            logger.info("database pool closed")
+
+
+atexit.register(close_pool)
+
+
+@contextmanager
 def _conn():
-    return psycopg2.connect(os.environ["DATABASE_URI"])
+    """A pooled connection, returned to the pool on the way out.
+
+    Yielding inside `with conn` keeps the existing commit-on-success,
+    rollback-on-exception behaviour every caller already relies on; psycopg2's
+    connection context manager does not close, which is exactly what a pool
+    wants.
+    """
+    pool = _get_pool()
+    conn = pool.getconn()
+    try:
+        with conn:
+            yield conn
+    finally:
+        pool.putconn(conn)
 
 
 def get_vehicles_filtered(
@@ -370,18 +433,17 @@ def get_vehicle(registration_number: str, include_archived: bool = True) -> Opti
 def get_archived_vehicles() -> list[dict]:
     sql = (
         f"SELECT {_VEHICLE_COLS} FROM vehicles "
-        f"WHERE status = %(archived)s ORDER BY registration_number"
+        f"WHERE upper(status) = 'ARCHIVED' ORDER BY registration_number"
     )
     with _conn() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(sql, {"archived": ARCHIVED})
+            cur.execute(sql)
             return [dict(r) for r in cur.fetchall()]
 
 
 def set_vehicle_archived(registration_number: str, archived: bool) -> bool:
-    """Archive or restore. Restoring clears the flag rather than guessing
-    at whatever value `status` held before — nothing in the codebase reads
-    any other value."""
+    """Archive or restore. Restoring writes 'ACTIVE' — the column is NOT NULL,
+    and that is the value every row in the live table already carries."""
     sql = """
         UPDATE vehicles SET status = %(status)s, updated_at = now()
         WHERE registration_number = %(reg)s
@@ -390,7 +452,7 @@ def set_vehicle_archived(registration_number: str, archived: bool) -> bool:
         with conn.cursor() as cur:
             cur.execute(
                 sql,
-                {"status": ARCHIVED if archived else None, "reg": registration_number},
+                {"status": ARCHIVED if archived else ACTIVE, "reg": registration_number},
             )
             return cur.rowcount > 0
 
@@ -554,8 +616,11 @@ def delete_web_user(subject: str) -> bool:
 # `updated_at` are deliberately absent: identity and lifecycle are not form
 # fields, and archiving goes through set_vehicle_archived.
 _WRITABLE_COLS = (
-    "registration_number", "nickname", "owner_name", "vehicle_class",
-    "fuel_type", "permit_type", "registration_date",
+    "registration_number", "nickname", "owner_name", "registration_date",
+    "manufacturer", "model", "vehicle_class", "fuel_type", "emission_norms",
+    "rto", "state",
+    "insurance_company", "insurance_policy_no",
+    "permit_type", "permit_no",
     "insurance_valid_until", "pucc_valid_until", "fitness_valid_until",
     "mv_tax_valid_until", "permit_valid_until",
 )

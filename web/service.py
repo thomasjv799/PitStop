@@ -294,15 +294,24 @@ def timeline_rows(rows: Iterable[dict]) -> list[dict[str, Any]]:
 # ── the vehicle detail page ──────────────────────────────────────────────
 
 
-# Everything on the vehicle row that is not one of the five expiry columns.
+# Everything on the vehicle row that is not one of the five expiry columns,
+# in the order the detail page lists them.
 DETAIL_FIELDS = (
     ("registration_number", "Registration"),
     ("nickname", "Nickname"),
     ("owner_name", "Owner"),
+    ("manufacturer", "Manufacturer"),
+    ("model", "Model"),
     ("vehicle_class", "Class"),
     ("fuel_type", "Fuel"),
-    ("permit_type", "Permit type"),
+    ("emission_norms", "Emission norms"),
+    ("rto", "RTO"),
+    ("state", "State"),
     ("registration_date", "Registered"),
+    ("insurance_company", "Insurer"),
+    ("insurance_policy_no", "Policy no."),
+    ("permit_type", "Permit type"),
+    ("permit_no", "Permit no."),
     ("status", "Status"),
 )
 
@@ -409,9 +418,17 @@ def build_users(rows: Iterable[dict]) -> list[dict[str, Any]]:
 DETAIL_INPUTS = (
     ("nickname", "Nickname"),
     ("owner_name", "Owner"),
+    ("manufacturer", "Manufacturer"),
+    ("model", "Model"),
     ("vehicle_class", "Class"),
     ("fuel_type", "Fuel type"),
+    ("emission_norms", "Emission norms"),
+    ("rto", "RTO"),
+    ("state", "State"),
+    ("insurance_company", "Insurer"),
+    ("insurance_policy_no", "Policy number"),
     ("permit_type", "Permit type"),
+    ("permit_no", "Permit number"),
 )
 DETAIL_INPUT_FIELDS = tuple(f for f, _ in DETAIL_INPUTS)
 

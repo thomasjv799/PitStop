@@ -58,13 +58,24 @@ psql "$DATABASE_URI" -f db/migrations/004_vehicle_archive_and_delete.sql
 psql "$DATABASE_URI" -f db/migrations/005_web_users.sql
 ```
 
+**Do not point `DATABASE_URI` at Supabase while running `pytest`.** The tests
+in `tests/test_db.py` are marked `integration` and write real rows; they skip
+when `DATABASE_URI` is unset, which is why the default is to leave it unset
+locally.
+
 ## Architecture notes
 
 - **Entry point:** `main.py` runs the Discord bot on the main thread (blocking, required) and starts the Telegram bot in a daemon thread only when `ENABLE_TELEGRAM` is truthy. Telegram is disabled by default (blocked in India).
 - **Platform routing:** `bot/message.py` defines `Message(platform, user_id, chat_id, text)`. Both bot listeners normalise incoming messages to this dataclass before passing to the agent. Reply routing uses `msg.platform` + `msg.chat_id` — the agent is platform-agnostic.
 - **AI layer:** `GroqProvider` implements the `AIProvider` ABC. The LangGraph graph in `ai/graph.py` has nodes: `load_memory → agent → execute_tools → save_memory`. Tools are defined in `bot/functions.py`.
 - **Cron (`cron/reminder_sweep.py`):** Fires at offsets `[-7, -3, -1, 0, +1, +3, +7, +15, +30]` days relative to each document's expiry date. Each `(vehicle_id, expiry_field, expiry_date, trigger_offset)` is unique-constrained in `reminder_log` — if a row already exists the reminder was already sent. Renewing a document (changing the expiry date) naturally creates new rows with the new date, resetting the cycle.
-- **Database:** Local homelab Postgres (`homelab` DB, `public` schema) via psycopg2. Key tables: `vehicles`, `reminder_log`, `reminder_snooze`, `chat_messages`, `chat_summary`. Connection string via `DATABASE_URI` env var.
+- **Database:** Supabase Postgres 17 — project `DropHunter_DB`, ref `tfupzscaeibhvflgomxz`, region `ap-southeast-1`, `public` schema, via psycopg2. Moved off the homelab box in Aug 2026 when its SSD failed; the homelab Postgres was the original home and Supabase was only a backup target. Connection string via `DATABASE_URI`.
+  - **Use a pooler host.** `db.<ref>.supabase.co` is IPv6-only and GitHub-hosted runners have no IPv6, so the cron sweep cannot reach it. Session pooler (`aws-0-ap-southeast-1.pooler.supabase.com:5432`) pairs correctly with this app's client-side pool.
+  - `db/client.py` keeps a `ThreadedConnectionPool` (`DB_POOL_MIN`/`DB_POOL_MAX`), created lazily so importing the module never needs `DATABASE_URI`. A remote database makes the old connect-per-query pattern cost a TLS handshake per call, and a dashboard render makes four.
+  - The project is **shared with DropHunter** — `games`, `watches`, `price_history`, `allowed_users` and friends live in the same schema. Migrations here affect that project's database too.
+  - `vehicles.status` is `NOT NULL DEFAULT 'ACTIVE'` and every row holds `'ACTIVE'`. Archiving writes `'ARCHIVED'`; restoring writes `'ACTIVE'`, never NULL, which the constraint rejects. Comparisons are case-insensitive.
+  - The live `vehicles` table carries eight VAHAN-sourced columns beyond the expiry dates: `manufacturer`, `model`, `emission_norms`, `rto`, `state`, `insurance_company`, `insurance_policy_no`, `permit_no`. `tests/test_schema_contract.py` pins the column list so it cannot drift silently.
+  - **RLS is disabled on every table**, so anyone holding the anon key can read or write them. The app connects with the Postgres URI and is unaffected, but the exposure is real.
 - **Notifications (`utils/notify.py`):** `notify(msg, platform, chat_id)` dispatches to the correct sender. Cron uses `CRON_NOTIFY_PLATFORM` + `CRON_NOTIFY_CHAT_ID` to decide where alerts go (default: Telegram).
 - **Web (`web/`):** FastAPI + Jinja2, sharing `db/client.py` with the bots so there is no second path that writes a vehicle row. Pages: `/` dashboard (counts + a queue of documents needing action), `/fleet` (the five-column matrix), `/timeline` (a −60d…+90d rail), `/vehicles/{registration}` (every column plus each document's reminder ladder), `/costs` (a stub), `/admin/users`.
 - **Web view model (`web/service.py`):** pure functions over plain dicts — no database, no request. Status, chips, the action queue, timeline positions, the ladder and the detail page are all built here, which is where the expiry rules are tested. Routes fetch rows and hand them over; templates render only what comes back.

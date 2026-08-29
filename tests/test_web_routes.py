@@ -1,16 +1,12 @@
 """Routes, the approval gate and the write actions, with the DB mocked."""
 
-import os
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
 
-# Settings are read at import time, so the mode has to be set first.
-os.environ.setdefault("AUTH_MODE", "dev")
-os.environ.setdefault("DEV_USER", "thomas")
-os.environ.setdefault("SESSION_SECRET", "test-secret")
-
+# The environment these need is set in tests/conftest.py, which pytest
+# imports before any test module.
 from fastapi.testclient import TestClient  # noqa: E402
 
 from web.app import app  # noqa: E402

@@ -459,3 +459,37 @@ def test_rows_report_whether_they_are_archived():
     # value must not read as archived.
     row["status"] = "ACTIVE"
     assert service.build_row(row, TODAY, {}, {})["archived"] is False
+
+
+# ── the live Supabase schema ─────────────────────────────────────────────
+
+
+def test_detail_shows_the_vahan_sourced_columns():
+    # The live vehicles table carries eight columns the app originally
+    # ignored; the detail page lists all of them.
+    labels = {label for _, label in service.DETAIL_FIELDS}
+    for expected in ("Manufacturer", "Model", "Emission norms", "RTO", "State",
+                     "Insurer", "Policy no.", "Permit no."):
+        assert expected in labels
+
+
+def test_every_editable_detail_input_is_a_real_writable_column():
+    from db.client import _WRITABLE_COLS
+    for field, _ in service.DETAIL_INPUTS:
+        assert field in _WRITABLE_COLS, f"{field} is edited but never written"
+
+
+def test_writable_columns_never_include_identity_or_lifecycle():
+    from db.client import _WRITABLE_COLS
+    for forbidden in ("id", "status", "created_at", "updated_at"):
+        assert forbidden not in _WRITABLE_COLS
+
+
+def test_archived_detection_is_case_insensitive():
+    # The live column holds 'ACTIVE' in uppercase, so the archived marker
+    # follows that convention.
+    row = veh(1, "Swift", "KL04AS1371")
+    for value, expected in (("ACTIVE", False), ("ARCHIVED", True),
+                            ("archived", True), ("Archived", True)):
+        row["status"] = value
+        assert service.build_row(row, TODAY, {}, {})["archived"] is expected

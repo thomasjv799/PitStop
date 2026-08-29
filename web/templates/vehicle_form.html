@@ -43,12 +43,27 @@
 
   <div class="formsection">
     <h2>Specification</h2>
-    <div class="sub">Optional, and free text — the suggestions are just the common values.</div>
+    <div class="sub">Optional, and free text — the suggestions are just the common values. These are the fields the VAHAN import fills in.</div>
     <div class="grid2">
+      {{ textfield('manufacturer', 'Manufacturer', form, errors, placeholder='Maruti Suzuki') }}
+      {{ textfield('model', 'Model', form, errors, placeholder='Swift VXI') }}
       {{ suggestfield('vehicle_class', 'Class', form, errors, vehicle_classes) }}
       {{ suggestfield('fuel_type', 'Fuel type', form, errors, fuel_types) }}
+      {{ textfield('emission_norms', 'Emission norms', form, errors, placeholder='BHARAT STAGE VI') }}
+      {{ textfield('rto', 'RTO', form, errors, placeholder='ERNAKULAM') }}
+      {{ textfield('state', 'State', form, errors, placeholder='Kerala') }}
+    </div>
+  </div>
+
+  <div class="formsection">
+    <h2>Policy and permit</h2>
+    <div class="sub">Reference numbers carried alongside the expiry dates.</div>
+    <div class="grid2">
+      {{ textfield('insurance_company', 'Insurer', form, errors, placeholder='ICICI Lombard') }}
+      {{ textfield('insurance_policy_no', 'Policy number', form, errors) }}
       {{ suggestfield('permit_type', 'Permit type', form, errors,
                       ['Goods (National)', 'Goods (State)', 'Contract carriage', 'Stage carriage']) }}
+      {{ textfield('permit_no', 'Permit number', form, errors) }}
     </div>
   </div>
 
