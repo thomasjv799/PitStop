@@ -1,0 +1,52 @@
+{% extends "_shell.html" %}
+{% block title %}Timeline · PitStop{% endblock %}
+
+{% block main %}
+<div class="pagehead">
+  <div>
+    <h1>Timeline</h1>
+    <div class="sub">
+      {{ past }} days back to {{ future }} days ahead · {{ today_text }}
+      {%- if clear %} · {{ clear }} vehicle{{ '' if clear == 1 else 's' }} clear of the window{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if rows %}
+<div class="tl">
+  <div class="tl-axis">
+    <span class="tl-label"></span>
+    <div class="tl-rail">
+      {% for tick in ticks %}
+      <span class="tl-tick{% if tick.is_today %} is-today{% endif %}" style="left:{{ tick.left }}%">{{ tick.label }}</span>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% for row in rows %}
+  <div class="tl-row">
+    <a class="tl-label" href="/vehicles/{{ row.registration_number }}">
+      <span class="name">{{ row.nickname }}</span>
+      <span class="reg">{{ row.registration_number }}</span>
+    </a>
+    <div class="tl-rail">
+      <span class="tl-today" style="left:{{ today_position }}%"></span>
+      {% for m in row.marks %}
+      <span class="tl-mark tl-{{ m.status }}" style="left:{{ m.left }}%"
+            title="{{ m.long_label }} · {{ m.date_text }} · {{ m.days_text }}">
+        {{ m.label }}{% if m.status == 'snoozed' %} · snoozed{% endif %}
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<p class="tl-note">
+  Only documents falling inside the window are plotted. Anything more than
+  {{ past }} days overdue is pinned to the left edge.
+</p>
+{% else %}
+<p class="empty-line">Nothing expires in the next {{ future }} days.</p>
+{% endif %}
+{% endblock %}

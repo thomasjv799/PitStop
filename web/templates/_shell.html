@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_mark.html" import mark %}
+
+{# Every signed-in page: nav, flash messages, then the page's own body. #}
+{% block body %}
+<header class="topbar">
+  <a class="brand" href="/">{{ mark(18, 2.2) }}PitStop</a>
+  <nav class="mainnav">
+    {% for key, href, label in nav %}
+    <a href="{{ href }}" {% if active == key %}aria-current="page"{% endif %}>{{ label
+      }}{% if key == 'users' and pending_badge %}<span class="badge">{{ pending_badge }}</span>{% endif %}</a>
+    {% endfor %}
+  </nav>
+  <span class="who">{{ user.name or user.sub }}{% if user.mode == 'dev' %} · dev{% endif %}</span>
+  <form method="post" action="/logout"><button class="btn btn-ghost btn-xs" type="submit">Sign out</button></form>
+</header>
+
+<main class="page">
+  {% if notice %}<p class="flash">{{ notice }}</p>{% endif %}
+  {% if error %}<p class="flash flash-error">{{ error }}</p>{% endif %}
+  {% block main %}{% endblock %}
+</main>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "_shell.html" %}
+{% from "_macros.html" import chip, cellattrs %}
+{% block title %}Fleet · PitStop{% endblock %}
+
+{% block main %}
+<div class="pagehead">
+  <div>
+    <h1>Fleet</h1>
+    <div class="sub">
+      {{ stats.total }} vehicle{{ '' if stats.total == 1 else 's' }} ·
+      {{ stats.overdue }} overdue · {{ stats.soon }} due within {{ soon_days }} days
+    </div>
+  </div>
+  <nav class="filters">
+    <a class="btn btn-secondary btn-xs" href="/fleet" {% if scope == 'all' %}aria-current="page"{% endif %}>All</a>
+    <a class="btn btn-secondary btn-xs" href="/fleet?scope=attention" {% if scope == 'attention' %}aria-current="page"{% endif %}>Expiring soon</a>
+    <a class="btn btn-secondary btn-xs" href="/fleet?scope=archived" {% if scope == 'archived' %}aria-current="page"{% endif %}>Archived</a>
+  </nav>
+</div>
+
+{% if rows %}
+<div class="matrix-scroll">
+  <div class="matrix">
+    <div class="mh">Vehicle</div>
+    {% for field, short, long in documents %}<div class="mh">{{ short }}</div>{% endfor %}
+    <div class="rule-head"></div>
+
+    {% for row in rows %}
+      <div class="veh">
+        <a class="name" href="/vehicles/{{ row.registration_number }}">{{ row.nickname }}</a>
+        <span class="reg">{{ row.registration_number }}{% if row.owner_name %} · {{ row.owner_name }}{% endif %}</span>
+      </div>
+      {% for cell in row.cells %}
+      <button type="button" class="doc"
+              {{ cellattrs(cell, row.id, row.registration_number, row.nickname) }}
+              aria-label="{{ cell.long_label }} for {{ row.nickname }}{% if cell.date_text %}, expires {{ cell.date_text }}{% else %}, not set{% endif %}">
+        {{ chip(cell) }}
+      </button>
+      {% endfor %}
+      <div class="rule"></div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<p class="empty-line">
+  {% if scope == 'attention' %}Nothing needs attention — every document is more than {{ soon_days }} days out.
+  {% elif scope == 'archived' %}No archived vehicles.
+  {% else %}No vehicles yet.{% endif %}
+</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% include "_dialog.html" with context %}
+<script src="{{ url_for('static', path='app.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "_shell.html" %}
+{% from "_macros.html" import cellattrs %}
+{% block title %}Dashboard · PitStop{% endblock %}
+
+{% block main %}
+<div class="pagehead">
+  <div>
+    <h1>Dashboard</h1>
+    <div class="sub">{{ today_text }}{% if sweep %} · {{ sweep }}{% endif %}</div>
+  </div>
+  <a class="btn btn-secondary btn-xs" href="/fleet">Open fleet →</a>
+</div>
+
+<div class="tiles">
+  <a class="tile" href="/fleet">
+    <b>{{ stats.total }}</b><span>vehicle{{ '' if stats.total == 1 else 's' }} tracked</span>
+  </a>
+  <a class="tile is-over" href="/fleet?scope=attention">
+    <b>{{ stats.overdue }}</b><span>overdue</span>
+  </a>
+  <a class="tile is-soon" href="/fleet?scope=attention">
+    <b>{{ stats.soon }}</b><span>due within {{ soon_days }} days</span>
+  </a>
+  <a class="tile" href="/timeline">
+    <b>{{ stats.total - stats.attention }}</b><span>clear</span>
+  </a>
+</div>
+
+<h2 class="sectionhead">
+  Needs attention
+  <span class="sub">{{ queue | length }} document{{ '' if queue | length == 1 else 's' }} · nearest expiry first</span>
+</h2>
+
+{% if queue %}
+<div class="queue">
+  {% for item in queue %}
+  <div class="qcard qcard-{{ item.status }}">
+    <div class="qcard-main">
+      <div class="qcard-top">
+        <a class="qcard-name" href="/vehicles/{{ item.registration_number }}">{{ item.nickname }}</a>
+        <span class="reg">{{ item.registration_number }}</span>
+      </div>
+      <div class="qcard-line status-{{ item.status }}">{{ item.headline }}</div>
+      <div class="qcard-meta">
+        {% if item.owner_name %}{{ item.owner_name }} · {% endif %}{{ item.long_date_text }}
+        {%- if item.status == 'snoozed' %}
+          {%- if item.snooze_reason %} · “{{ item.snooze_reason }}”{% endif %}
+          {%- if item.snooze_by %} · set by {{ item.snooze_by }}{% endif %}
+        {%- else %} · {{ item.reminders_sent }} of {{ item.reminders_total }} reminders sent
+          {%- if item.next_offset_date %} · next {{ item.next_offset_date }}{% endif %}
+        {%- endif %}
+      </div>
+    </div>
+    <button type="button" class="btn btn-primary btn-xs doc"
+            {{ cellattrs(item, item.vehicle_id, item.registration_number, item.nickname) }}>
+      {% if item.status == 'snoozed' %}Unsnooze{% else %}Act{% endif %}
+    </button>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty-line">Nothing needs attention — every document is more than {{ soon_days }} days out.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% include "_dialog.html" with context %}
+<script src="{{ url_for('static', path='app.js') }}"></script>
+{% endblock %}

@@ -17,6 +17,12 @@ _ALLOWED_UPDATE_FIELDS = frozenset({
     "permit_valid_until",
 })
 
+# An archived vehicle keeps its row but drops out of the fleet, the cron
+# sweep and the bot. `status` is free text on an externally-created table, so
+# match this value exactly and leave every other value — NULL included — alone.
+ARCHIVED = "archived"
+_NOT_ARCHIVED = "status IS DISTINCT FROM 'archived'"
+
 _VEHICLE_COLS = """
     id, nickname, registration_number, status, vehicle_class,
     fuel_type, owner_name, registration_date,
@@ -43,12 +49,15 @@ def get_vehicles_filtered(
     days: int = 30,
 ) -> list[dict]:
     if filter_type == "all":
-        sql = f"SELECT {_VEHICLE_COLS} FROM vehicles ORDER BY registration_number"
+        sql = (
+            f"SELECT {_VEHICLE_COLS} FROM vehicles "
+            f"WHERE {_NOT_ARCHIVED} ORDER BY registration_number"
+        )
         params: dict = {}
     elif filter_type == "expiring_soon":
         sql = f"""
             SELECT {_VEHICLE_COLS} FROM vehicles
-            WHERE
+            WHERE {_NOT_ARCHIVED} AND (
                 insurance_valid_until BETWEEN CURRENT_DATE
                     AND CURRENT_DATE + %(days)s * INTERVAL '1 day'
                 OR pucc_valid_until BETWEEN CURRENT_DATE
@@ -59,33 +68,40 @@ def get_vehicles_filtered(
                     AND CURRENT_DATE + %(days)s * INTERVAL '1 day'
                 OR (permit_valid_until IS NOT NULL
                     AND permit_valid_until BETWEEN CURRENT_DATE
-                        AND CURRENT_DATE + %(days)s * INTERVAL '1 day')
+                        AND CURRENT_DATE + %(days)s * INTERVAL '1 day'))
             {_ORDER_BY_NEAREST}
         """
         params = {"days": days}
     elif filter_type == "expired":
         sql = f"""
             SELECT {_VEHICLE_COLS} FROM vehicles
-            WHERE
+            WHERE {_NOT_ARCHIVED} AND (
                 insurance_valid_until < CURRENT_DATE
                 OR pucc_valid_until < CURRENT_DATE
                 OR fitness_valid_until < CURRENT_DATE
                 OR mv_tax_valid_until < CURRENT_DATE
-                OR (permit_valid_until IS NOT NULL AND permit_valid_until < CURRENT_DATE)
+                OR (permit_valid_until IS NOT NULL AND permit_valid_until < CURRENT_DATE))
             {_ORDER_BY_NEAREST}
         """
         params = {}
     elif filter_type == "by_owner":
         sql = f"""
             SELECT {_VEHICLE_COLS} FROM vehicles
-            WHERE owner_name ILIKE %(value)s ORDER BY registration_number
+            WHERE {_NOT_ARCHIVED} AND owner_name ILIKE %(value)s
+            ORDER BY registration_number
         """
         params = {"value": f"%{value}%"}
     elif filter_type == "by_registration":
-        sql = f"SELECT {_VEHICLE_COLS} FROM vehicles WHERE registration_number = %(value)s"
+        sql = (
+            f"SELECT {_VEHICLE_COLS} FROM vehicles "
+            f"WHERE {_NOT_ARCHIVED} AND registration_number = %(value)s"
+        )
         params = {"value": value}
     elif filter_type == "by_nickname":
-        sql = f"SELECT {_VEHICLE_COLS} FROM vehicles WHERE nickname ILIKE %(value)s"
+        sql = (
+            f"SELECT {_VEHICLE_COLS} FROM vehicles "
+            f"WHERE {_NOT_ARCHIVED} AND nickname ILIKE %(value)s"
+        )
         params = {"value": f"%{value}%"}
     else:
         raise ValueError(f"Unknown filter_type: {filter_type!r}")
@@ -109,8 +125,10 @@ def update_vehicle_field(registration_number: str, field: str, new_date: str) ->
             return cur.rowcount > 0
 
 
-def get_all_vehicles_with_expiry() -> list[dict]:
-    sql = f"SELECT {_VEHICLE_COLS} FROM vehicles ORDER BY id"
+def get_all_vehicles_with_expiry(include_archived: bool = False) -> list[dict]:
+    """Every vehicle. Archived ones are excluded unless asked for."""
+    where = "" if include_archived else f"WHERE {_NOT_ARCHIVED}"
+    sql = f"SELECT {_VEHICLE_COLS} FROM vehicles {where} ORDER BY id"
     with _conn() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql)
@@ -282,3 +300,248 @@ def summarize_if_needed(user_id: str, provider) -> None:
                 "DELETE FROM chat_messages WHERE id = ANY(%(ids)s)",
                 {"ids": [m["id"] for m in oldest]},
             )
+
+
+def get_active_snoozes() -> list[dict]:
+    """Every snooze still in force, for the whole fleet.
+
+    Mirrors ``is_snoozed`` but in one round trip so the web dashboard does
+    not issue a query per vehicle-field pair.
+    """
+    sql = """
+        SELECT vehicle_id, expiry_field, snoozed_until, reason, created_by, created_at
+        FROM reminder_snooze
+        WHERE snoozed_until IS NULL OR snoozed_until >= CURRENT_DATE
+    """
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql)
+            return [dict(r) for r in cur.fetchall()]
+
+
+def get_reminder_counts() -> list[dict]:
+    """How many of the escalating reminders have fired, per document.
+
+    Grouped by expiry_date as well as vehicle_id/expiry_field: renewing a
+    document starts a fresh cycle against the new date, and only the rows
+    matching the *current* date describe where that cycle stands.
+    """
+    sql = """
+        SELECT vehicle_id, expiry_field, expiry_date,
+               COUNT(*) AS sent, MAX(sent_at) AS last_sent
+        FROM reminder_log
+        GROUP BY vehicle_id, expiry_field, expiry_date
+    """
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql)
+            return [dict(r) for r in cur.fetchall()]
+
+
+def get_last_sweep() -> Optional[dict]:
+    """The most recent cron sweep that actually sent something."""
+    sql = """
+        SELECT MAX(sent_at) AS last_sent, COUNT(*) AS sent
+        FROM reminder_log
+        GROUP BY sent_at::date
+        ORDER BY 1 DESC
+        LIMIT 1
+    """
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql)
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def get_vehicle(registration_number: str, include_archived: bool = True) -> Optional[dict]:
+    """One vehicle, every column the detail page shows."""
+    where = "registration_number = %(reg)s"
+    if not include_archived:
+        where += f" AND {_NOT_ARCHIVED}"
+    sql = f"SELECT {_VEHICLE_COLS} FROM vehicles WHERE {where}"
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, {"reg": registration_number})
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def get_archived_vehicles() -> list[dict]:
+    sql = (
+        f"SELECT {_VEHICLE_COLS} FROM vehicles "
+        f"WHERE status = %(archived)s ORDER BY registration_number"
+    )
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, {"archived": ARCHIVED})
+            return [dict(r) for r in cur.fetchall()]
+
+
+def set_vehicle_archived(registration_number: str, archived: bool) -> bool:
+    """Archive or restore. Restoring clears the flag rather than guessing
+    at whatever value `status` held before — nothing in the codebase reads
+    any other value."""
+    sql = """
+        UPDATE vehicles SET status = %(status)s, updated_at = now()
+        WHERE registration_number = %(reg)s
+    """
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                sql,
+                {"status": ARCHIVED if archived else None, "reg": registration_number},
+            )
+            return cur.rowcount > 0
+
+
+def delete_vehicle(registration_number: str) -> bool:
+    """Permanently remove a vehicle. reminder_log and reminder_snooze cascade
+    (see db/migrations/004_vehicle_archive_and_delete.sql) — there is no undo."""
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM vehicles WHERE registration_number = %(reg)s",
+                {"reg": registration_number},
+            )
+            return cur.rowcount > 0
+
+
+def get_reminder_offsets(vehicle_id: int) -> list[dict]:
+    """Which individual reminders have fired for one vehicle.
+
+    The counts from ``get_reminder_counts`` drive the fleet chips; the detail
+    page's ladder needs to know *which* offsets are lit, not how many.
+    """
+    sql = """
+        SELECT expiry_field, expiry_date, trigger_offset, sent_at
+        FROM reminder_log
+        WHERE vehicle_id = %(vid)s
+        ORDER BY expiry_date, trigger_offset
+    """
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, {"vid": vehicle_id})
+            return [dict(r) for r in cur.fetchall()]
+
+
+# ── web sign-in accounts (see db/migrations/005_web_users.sql) ────────────
+
+
+_USER_COLS = """
+    id, subject, email, name, role, approved_at, approved_by,
+    created_at, last_seen_at
+"""
+
+
+def upsert_web_user(
+    subject: str, email: str, name: str, bootstrap_admin: bool = False
+) -> dict:
+    """Record a sign-in and return the account as it now stands.
+
+    A first-time account lands unapproved — `approved_at` stays NULL — unless
+    `bootstrap_admin` is set, which is how the ADMIN_EMAIL owner gets in
+    before there is anybody to approve them. An existing row keeps its role
+    and approval: re-signing in never re-grants anything, and the bootstrap
+    flag cannot quietly promote an account that was demoted on purpose.
+    """
+    sql = f"""
+        INSERT INTO web_users (subject, email, name, role, approved_at, approved_by)
+        VALUES (
+            %(sub)s, %(email)s, %(name)s,
+            CASE WHEN %(boot)s THEN 'admin' ELSE 'member' END,
+            CASE WHEN %(boot)s THEN now() ELSE NULL END,
+            CASE WHEN %(boot)s THEN 'bootstrap' ELSE NULL END
+        )
+        ON CONFLICT (subject) DO UPDATE
+            SET email        = EXCLUDED.email,
+                name         = EXCLUDED.name,
+                last_seen_at = now()
+        RETURNING {_USER_COLS}
+    """
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, {
+                "sub": subject, "email": email, "name": name,
+                "boot": bootstrap_admin,
+            })
+            return dict(cur.fetchone())
+
+
+def get_web_user(subject: str) -> Optional[dict]:
+    """Re-read an account. Called on every request that touches fleet data,
+    so revoking approval takes effect on the visitor's next page load rather
+    than whenever their session happens to expire."""
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"SELECT {_USER_COLS} FROM web_users WHERE subject = %(sub)s",
+                {"sub": subject},
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def list_web_users() -> list[dict]:
+    """Everyone, pending first — that is the list an admin has to act on."""
+    sql = f"""
+        SELECT {_USER_COLS} FROM web_users
+        ORDER BY (approved_at IS NOT NULL), created_at DESC
+    """
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql)
+            return [dict(r) for r in cur.fetchall()]
+
+
+def count_pending_web_users() -> int:
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM web_users WHERE approved_at IS NULL")
+            return int(cur.fetchone()[0])
+
+
+def set_web_user_approved(subject: str, approved: bool, by: str) -> bool:
+    sql = """
+        UPDATE web_users
+        SET approved_at = CASE WHEN %(ok)s THEN now() ELSE NULL END,
+            approved_by = CASE WHEN %(ok)s THEN %(by)s ELSE NULL END
+        WHERE subject = %(sub)s
+    """
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, {"ok": approved, "by": by, "sub": subject})
+            return cur.rowcount > 0
+
+
+def set_web_user_role(subject: str, role: str) -> bool:
+    if role not in ("admin", "member"):
+        raise ValueError(f"Unknown role {role!r}")
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE web_users SET role = %(role)s WHERE subject = %(sub)s",
+                {"role": role, "sub": subject},
+            )
+            return cur.rowcount > 0
+
+
+def count_web_admins(exclude_subject: Optional[str] = None) -> int:
+    """How many approved admins there are — used to refuse the change that
+    would leave the app with nobody able to approve anyone."""
+    sql = """
+        SELECT COUNT(*) FROM web_users
+        WHERE role = 'admin' AND approved_at IS NOT NULL
+          AND (%(skip)s IS NULL OR subject <> %(skip)s)
+    """
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, {"skip": exclude_subject})
+            return int(cur.fetchone()[0])
+
+
+def delete_web_user(subject: str) -> bool:
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM web_users WHERE subject = %(sub)s", {"sub": subject})
+            return cur.rowcount > 0

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_mark.html" import mark %}
+{% block title %}Awaiting approval · PitStop{% endblock %}
+
+{% block body %}
+<main class="signin-wrap">
+  <div class="card elev-md waiting">
+    <div class="signin-brand">{{ mark(20, 2) }}<span>PitStop</span></div>
+    <h1>You're signed in — but not approved yet</h1>
+    <p>
+      Your account (<b>{{ user.email or user.sub }}</b>) has been recorded and is
+      waiting for an administrator to grant access. Nothing about the fleet is
+      visible until then.
+    </p>
+    {% if admin_email %}
+    <p class="text-muted" style="font-size:12px">
+      The administrator for this instance is <b>{{ admin_email }}</b>.
+    </p>
+    {% endif %}
+    <div class="waiting-actions">
+      <a class="btn btn-primary" href="/pending">Check again</a>
+      <form method="post" action="/logout"><button class="btn btn-secondary" type="submit">Sign out</button></form>
+    </div>
+  </div>
+</main>
+{% endblock %}
