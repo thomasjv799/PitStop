@@ -8,7 +8,14 @@ on:
 
 jobs:
   sweep:
-    runs-on: self-hosted
+    # Was self-hosted because Postgres only listened on the homelab LAN.
+    # That box's SSD failed and the database moved to Supabase, so the sweep
+    # runs on a GitHub-hosted runner again.
+    #
+    # DATABASE_URI must be a Supabase *pooler* URI
+    # (aws-0-<region>.pooler.supabase.com): the direct db.<ref>.supabase.co
+    # host is IPv6-only and hosted runners have no IPv6.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
