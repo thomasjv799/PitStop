@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from web import service
+from web.config import DOCUMENTS
 
 TODAY = date(2026, 8, 30)
 
@@ -342,3 +343,105 @@ def test_build_users_reports_the_approval_state():
     assert users[0]["approved"] is True and users[0]["state"] == "Approved"
     assert users[1]["approved"] is False and users[1]["state"] == "Awaiting approval"
     assert users[1]["name"] == "b@x.com"   # falls back to the address
+
+
+# ── the add / edit form ──────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("KL04AS1371", "KL04AS1371"),
+    ("kl 04-as 1371", "KL04AS1371"),
+    ("  KL-04 AS-1371  ", "KL04AS1371"),
+    ("kl04as1371", "KL04AS1371"),
+])
+def test_registration_is_normalised_to_one_canonical_form(raw, expected):
+    # The bot, the cron sweep and the web app must agree on what a vehicle
+    # is called, so spaces and hyphens are stripped on the way in.
+    assert service.normalise_registration(raw) == expected
+
+
+def test_normalise_registration_tolerates_nothing():
+    assert service.normalise_registration("") == ""
+    assert service.normalise_registration(None) == ""
+
+
+def _form(**over):
+    base = {"registration_number": "KL04AS1371"}
+    base.update(over)
+    return base
+
+
+def test_validate_accepts_a_registration_and_nothing_else():
+    result = service.validate_vehicle(_form())
+    assert result["ok"] is True
+    assert result["values"]["registration_number"] == "KL04AS1371"
+    # Everything unfilled becomes a real NULL, not an empty string.
+    assert result["values"]["nickname"] is None
+    assert result["values"]["insurance_valid_until"] is None
+
+
+def test_validate_requires_a_registration():
+    assert "registration_number" in service.validate_vehicle(_form(registration_number=""))["errors"]
+    assert "registration_number" in service.validate_vehicle(_form(registration_number="  -- "))["errors"]
+
+
+def test_validate_rejects_a_registration_with_no_digits():
+    errors = service.validate_vehicle(_form(registration_number="ABCDEF"))["errors"]
+    assert "registration_number" in errors
+
+
+def test_validate_rejects_an_over_long_registration():
+    errors = service.validate_vehicle(_form(registration_number="KL04AS1371" * 3))["errors"]
+    assert "registration_number" in errors
+
+
+def test_validate_parses_dates_and_flags_bad_ones():
+    ok = service.validate_vehicle(_form(insurance_valid_until="2027-01-12"))
+    assert ok["values"]["insurance_valid_until"] == date(2027, 1, 12)
+
+    bad = service.validate_vehicle(_form(pucc_valid_until="12/01/2027"))
+    assert "pucc_valid_until" in bad["errors"]
+
+
+def test_validate_treats_an_empty_date_as_no_date_not_an_error():
+    result = service.validate_vehicle(_form(fitness_valid_until="", registration_date=""))
+    assert result["ok"] is True
+    assert result["values"]["fitness_valid_until"] is None
+
+
+def test_validate_catches_an_expiry_before_the_vehicle_existed():
+    # A document expiring before the vehicle was registered is a typo, not a
+    # lapsed document.
+    result = service.validate_vehicle(_form(
+        registration_date="2019-04-02", insurance_valid_until="2018-01-01"))
+    assert "insurance_valid_until" in result["errors"]
+    assert "before the vehicle was registered" in result["errors"]["insurance_valid_until"]
+
+
+def test_validate_allows_an_expiry_after_registration():
+    result = service.validate_vehicle(_form(
+        registration_date="2019-04-02", insurance_valid_until="2027-01-12"))
+    assert result["ok"] is True
+
+
+def test_validate_rejects_an_over_long_detail_field():
+    assert "nickname" in service.validate_vehicle(_form(nickname="x" * 200))["errors"]
+
+
+def test_form_from_vehicle_round_trips_into_the_edit_form():
+    form = service.form_from_vehicle(FULL)
+    assert form["registration_number"] == "KL04AS1371"
+    assert form["vehicle_class"] == "LMV"
+    assert form["insurance_valid_until"] == "2027-01-12"
+    assert form["permit_valid_until"] == ""      # unset stays empty
+    # What comes out of a vehicle must validate cleanly going back in.
+    assert service.validate_vehicle(form)["ok"] is True
+
+
+def test_blank_form_covers_every_input_the_template_renders():
+    blank = service.blank_form()
+    expected = {"registration_number", "registration_date"}
+    expected |= set(service.DETAIL_INPUT_FIELDS)
+    expected |= {f for f, _, _ in DOCUMENTS}
+    assert set(blank) == expected
+    assert all(v == "" for v in blank.values())

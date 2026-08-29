@@ -1,5 +1,5 @@
 {% extends "_shell.html" %}
-{% from "_macros.html" import chip, cellattrs %}
+{% from "_macros.html" import badge, cellattrs %}
 {% block title %}Fleet · PitStop{% endblock %}
 
 {% block main %}
@@ -11,46 +11,64 @@
       {{ stats.overdue }} overdue · {{ stats.soon }} due within {{ soon_days }} days
     </div>
   </div>
-  <nav class="filters">
-    <a class="btn btn-secondary btn-xs" href="/fleet" {% if scope == 'all' %}aria-current="page"{% endif %}>All</a>
-    <a class="btn btn-secondary btn-xs" href="/fleet?scope=attention" {% if scope == 'attention' %}aria-current="page"{% endif %}>Expiring soon</a>
-    <a class="btn btn-secondary btn-xs" href="/fleet?scope=archived" {% if scope == 'archived' %}aria-current="page"{% endif %}>Archived</a>
-  </nav>
+  <div class="headactions">
+    <div class="seg">
+      <a class="seg-opt" href="/fleet" {% if scope == 'all' %}aria-current="page"{% endif %}>All</a>
+      <a class="seg-opt" href="/fleet?scope=attention" {% if scope == 'attention' %}aria-current="page"{% endif %}>Needs attention</a>
+      <a class="seg-opt" href="/fleet?scope=archived" {% if scope == 'archived' %}aria-current="page"{% endif %}>Archived</a>
+    </div>
+    <a class="btn btn-primary" href="/vehicles/new">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Add vehicle
+    </a>
+  </div>
 </div>
 
 {% if rows %}
-<div class="matrix-scroll">
-  <div class="matrix">
-    <div class="mh">Vehicle</div>
-    {% for field, short, long in documents %}<div class="mh">{{ short }}</div>{% endfor %}
-    <div class="rule-head"></div>
-
-    {% for row in rows %}
-      <div class="veh">
-        <a class="name" href="/vehicles/{{ row.registration_number }}">{{ row.nickname }}</a>
-        <span class="reg">{{ row.registration_number }}{% if row.owner_name %} · {{ row.owner_name }}{% endif %}</span>
-      </div>
-      {% for cell in row.cells %}
-      <button type="button" class="doc"
-              {{ cellattrs(cell, row.id, row.registration_number, row.nickname) }}
-              aria-label="{{ cell.long_label }} for {{ row.nickname }}{% if cell.date_text %}, expires {{ cell.date_text }}{% else %}, not set{% endif %}">
-        {{ chip(cell) }}
-      </button>
+<div class="card scroll-x">
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th>Vehicle</th>
+        {% for field, short, long in documents %}<th>{{ short }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="vcell">
+          <a class="vname" href="/vehicles/{{ row.registration_number }}">{{ row.nickname }}</a>
+          <span class="vreg">{{ row.registration_number }}{% if row.owner_name %} · {{ row.owner_name }}{% endif %}</span>
+        </td>
+        {% for cell in row.cells %}
+        <td>
+          <button type="button" class="doc"
+                  {{ cellattrs(cell, row.id, row.registration_number, row.nickname) }}
+                  aria-label="{{ cell.long_label }} for {{ row.nickname }}{% if cell.date_text %}, expires {{ cell.date_text }}{% else %}, not set{% endif %}">
+            {{ badge(cell) }}
+          </button>
+        </td>
+        {% endfor %}
+      </tr>
       {% endfor %}
-      <div class="rule"></div>
-    {% endfor %}
-  </div>
+    </tbody>
+  </table>
 </div>
 {% else %}
-<p class="empty-line">
-  {% if scope == 'attention' %}Nothing needs attention — every document is more than {{ soon_days }} days out.
-  {% elif scope == 'archived' %}No archived vehicles.
-  {% else %}No vehicles yet.{% endif %}
-</p>
+<div class="card empty">
+  {% if scope == 'attention' %}
+    <h2>Nothing needs attention</h2>
+    <p>Every document is more than {{ soon_days }} days out.</p>
+  {% elif scope == 'archived' %}
+    <h2>No archived vehicles</h2>
+    <p>Archiving a vehicle keeps its record but stops all reminders.</p>
+  {% else %}
+    <h2>No vehicles yet</h2>
+    <p>Add your first vehicle and PitStop will start tracking its documents.</p>
+    <a class="btn btn-primary" href="/vehicles/new">Add a vehicle</a>
+  {% endif %}
+</div>
 {% endif %}
 {% endblock %}
 
-{% block scripts %}
-{% include "_dialog.html" with context %}
-<script src="{{ url_for('static', path='app.js') }}"></script>
-{% endblock %}
+{% block scripts %}{% include "_dialog.html" with context %}{% endblock %}

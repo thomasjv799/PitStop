@@ -399,3 +399,115 @@ def build_users(rows: Iterable[dict]) -> list[dict[str, Any]]:
             "last_seen_text": format_long_date(row["last_seen_at"].date()),
         })
     return out
+
+
+# ── creating and editing a vehicle ───────────────────────────────────────
+
+
+# Free-text columns the add/edit form writes. Kept apart from DOCUMENTS so a
+# form field can never be routed into an expiry column, or the reverse.
+DETAIL_INPUTS = (
+    ("nickname", "Nickname"),
+    ("owner_name", "Owner"),
+    ("vehicle_class", "Class"),
+    ("fuel_type", "Fuel type"),
+    ("permit_type", "Permit type"),
+)
+DETAIL_INPUT_FIELDS = tuple(f for f, _ in DETAIL_INPUTS)
+
+# Suggestions only — the columns are free text, and a vehicle whose class or
+# fuel is not on these lists still saves.
+VEHICLE_CLASSES = ("LMV", "LGV", "MCWG", "HGV", "HPV", "Trailer", "Other")
+FUEL_TYPES = ("Petrol", "Diesel", "CNG", "LPG", "Electric", "Hybrid", "Other")
+
+REGISTRATION_MAX = 20
+
+
+def normalise_registration(raw: str) -> str:
+    """`kl 04-as 1371` → `KL04AS1371`.
+
+    Indian registration marks get written with spaces and hyphens in every
+    combination; the database holds one canonical form so the bot, the cron
+    sweep and the web app all agree on what a vehicle is called.
+    """
+    return "".join(ch for ch in (raw or "").upper() if ch.isalnum())
+
+
+def parse_optional_date(raw: str) -> tuple[Optional[date], bool]:
+    """`(value, ok)`. An empty string is a legitimate 'no date'."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None, True
+    try:
+        return date.fromisoformat(raw), True
+    except ValueError:
+        return None, False
+
+
+def validate_vehicle(form: dict, existing_registration: Optional[str] = None) -> dict:
+    """Check an add/edit submission and return cleaned values plus errors.
+
+    Pure: it never touches the database, so uniqueness is not decided here —
+    the route asks the database and adds that error itself. `errors` is keyed
+    by field name so the template can mark the offending input.
+    """
+    errors: dict[str, str] = {}
+    values: dict[str, Any] = {}
+
+    registration = normalise_registration(form.get("registration_number", ""))
+    if not registration:
+        errors["registration_number"] = "A registration number is required."
+    elif len(registration) > REGISTRATION_MAX:
+        errors["registration_number"] = (
+            f"That is longer than {REGISTRATION_MAX} characters."
+        )
+    elif not any(c.isdigit() for c in registration):
+        errors["registration_number"] = "A registration number needs at least one digit."
+    values["registration_number"] = registration
+
+    for field, label in DETAIL_INPUTS:
+        text = (form.get(field) or "").strip()
+        if len(text) > 120:
+            errors[field] = f"{label} is too long (120 characters max)."
+        values[field] = text or None
+
+    for field, label in (("registration_date", "Registration date"),) + tuple(
+        (f, long) for f, _, long in DOCUMENTS
+    ):
+        parsed, ok = parse_optional_date(form.get(field, ""))
+        if not ok:
+            errors[field] = f"{label} is not a valid date."
+        values[field] = parsed
+
+    # An expiry that predates the vehicle's own registration is a typo, not a
+    # lapsed document — flag it rather than silently tracking nonsense.
+    registered = values.get("registration_date")
+    if registered:
+        for field, _, long in DOCUMENTS:
+            expiry = values.get(field)
+            if expiry and expiry < registered:
+                errors[field] = f"{long} expires before the vehicle was registered."
+
+    values["_existing"] = existing_registration
+    return {"values": values, "errors": errors, "ok": not errors}
+
+
+def form_from_vehicle(vehicle: dict) -> dict[str, str]:
+    """A vehicle row as form values, for prefilling the edit form."""
+    out = {"registration_number": vehicle.get("registration_number") or ""}
+    for field, _ in DETAIL_INPUTS:
+        out[field] = vehicle.get(field) or ""
+    for field in ("registration_date",) + tuple(f for f, _, _ in DOCUMENTS):
+        value = vehicle.get(field)
+        out[field] = value.isoformat() if isinstance(value, date) else ""
+    return out
+
+
+def blank_form() -> dict[str, str]:
+    keys = (
+        ("registration_number",)
+        + DETAIL_INPUT_FIELDS
+        + ("registration_date",)
+        + tuple(f for f, _, _ in DOCUMENTS)
+    )
+    return {k: "" for k in keys}

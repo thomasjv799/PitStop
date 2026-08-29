@@ -3,54 +3,38 @@
 {% block title %}Sign in · PitStop{% endblock %}
 
 {% block body %}
-<main class="signin-wrap">
-  <div class="signin">
+<main class="centered">
+  <div class="card authcard">
+    <div class="brand">{{ mark(22) }}PitStop</div>
+    <h1>Sign in</h1>
+    <p class="authlead">
+      {% if settings.is_oidc %}
+        Vehicle document expiry tracking. New accounts need an administrator's
+        approval before any data is visible.
+      {% else %}
+        Running in dev mode — sign in locally as <b>{{ settings.dev_user }}</b>.
+      {% endif %}
+    </p>
 
-    <section class="signin-pitch">
-      <div class="signin-brand">{{ mark(20, 2) }}<span>PitStop</span></div>
-      <div class="signin-mid">
-        <p class="signin-line">Nothing expires without you knowing.</p>
-        <ul class="signin-docs">
-          {% for label in labels %}<li>{{ label }}</li>{% endfor %}
-        </ul>
-      </div>
-      <p class="signin-sweep">Insurance, tax and permit expiry for the whole fleet — tracked, reminded, in one place.</p>
-    </section>
+    {% if error %}<p class="flash flash-error">{{ error }}</p>{% endif %}
 
-    <section class="signin-auth">
-      <h1>Sign in</h1>
-      {% if error %}<p class="flash flash-error" style="margin:0">{{ error }}</p>{% endif %}
-      <p>
+    <form method="post" action="/login">
+      <button class="btn btn-primary btn-block" type="submit">
         {% if settings.is_oidc %}
-          PitStop uses your {{ provider_name }} account. New accounts need an
-          administrator's approval before any data is visible.
-        {% else %}
-          Running in dev mode — sign in locally as
-          <b>{{ settings.dev_user }}</b>.
-        {% endif %}
-      </p>
+        <svg width="15" height="15" viewBox="0 0 18 18" aria-hidden="true"><path fill="currentColor" d="M17.6 9.2c0-.6-.1-1.2-.2-1.8H9v3.4h4.8a4.1 4.1 0 0 1-1.8 2.7v2.2h2.9c1.7-1.6 2.7-3.9 2.7-6.5Z"/><path fill="currentColor" opacity=".8" d="M9 18c2.4 0 4.5-.8 6-2.2l-2.9-2.2c-.8.5-1.8.9-3.1.9-2.4 0-4.4-1.6-5.1-3.8H.9v2.3A9 9 0 0 0 9 18Z"/><path fill="currentColor" opacity=".6" d="M3.9 10.7a5.4 5.4 0 0 1 0-3.4V5H.9a9 9 0 0 0 0 8l3-2.3Z"/><path fill="currentColor" opacity=".8" d="M9 3.6c1.3 0 2.5.5 3.4 1.3l2.6-2.6A9 9 0 0 0 .9 5l3 2.3C4.6 5.2 6.6 3.6 9 3.6Z"/></svg>
+        Continue with {{ provider_name }}
+        {% else %}Continue as {{ settings.dev_user }}{% endif %}
+      </button>
+    </form>
 
-      <form method="post" action="/login">
-        <button class="btn btn-primary btn-block" style="height:42px" type="submit">
-          {% if settings.is_oidc %}
-          <svg width="15" height="15" viewBox="0 0 18 18" aria-hidden="true"><path fill="currentColor" d="M17.6 9.2c0-.6-.1-1.2-.2-1.8H9v3.4h4.8a4.1 4.1 0 0 1-1.8 2.7v2.2h2.9c1.7-1.6 2.7-3.9 2.7-6.5Z"/><path fill="currentColor" opacity=".75" d="M9 18c2.4 0 4.5-.8 6-2.2l-2.9-2.2c-.8.5-1.8.9-3.1.9-2.4 0-4.4-1.6-5.1-3.8H.9v2.3A9 9 0 0 0 9 18Z"/><path fill="currentColor" opacity=".5" d="M3.9 10.7a5.4 5.4 0 0 1 0-3.4V5H.9a9 9 0 0 0 0 8l3-2.3Z"/><path fill="currentColor" opacity=".75" d="M9 3.6c1.3 0 2.5.5 3.4 1.3l2.6-2.6A9 9 0 0 0 .9 5l3 2.3C4.6 5.2 6.6 3.6 9 3.6Z"/></svg>
-          Continue with {{ provider_name }}
-          {% else %}Continue as {{ settings.dev_user }}{% endif %}
-        </button>
-      </form>
-
-      <hr class="rule-soft">
-
-      <p class="signin-note">
-        {% if settings.is_oidc %}
-          Signing in doesn't grant access. You'll land in a waiting room until
-          an administrator approves your account.
-        {% else %}
-          Set <b>AUTH_MODE=google</b> with a Google OAuth client to require a real sign-in.
-        {% endif %}
-      </p>
-    </section>
-
+    <p class="authnote">
+      {% if settings.is_oidc %}
+        Signing in doesn't grant access. You'll land in a waiting room until an
+        administrator approves your account.
+      {% else %}
+        Set <b>AUTH_MODE=google</b> with a Google OAuth client to require a real sign-in.
+      {% endif %}
+    </p>
   </div>
 </main>
 {% endblock %}

@@ -10,48 +10,50 @@
 </div>
 
 {% if dev %}
-<p class="empty-line">
-  Running in dev mode — there are no real accounts. Set <b>AUTH_MODE=google</b>
-  to manage sign-ins here.
-</p>
+<div class="card empty">
+  <h2>No real accounts</h2>
+  <p>Running in dev mode. Set <b>AUTH_MODE=google</b> to manage sign-ins here.</p>
+</div>
 {% elif users %}
-<div class="matrix-scroll">
+<div class="card scroll-x">
   <table class="table users">
     <thead>
       <tr><th>Account</th><th>State</th><th>Role</th><th>First seen</th><th>Last seen</th><th></th></tr>
     </thead>
     <tbody>
       {% for u in users %}
-      <tr{% if not u.approved %} class="is-pending"{% endif %}>
+      <tr{% if not u.approved %} class="pending"{% endif %}>
         <td>
           <span class="uname">{{ u.name }}</span>
           <span class="uemail">{{ u.email }}</span>
         </td>
         <td>
-          {% if u.approved %}<span class="chip chip-ok">Approved</span>
-          {% else %}<span class="chip chip-soon">Awaiting approval</span>{% endif %}
+          {% if u.approved %}<span class="badge badge-ok">Approved</span>
+          {% else %}<span class="badge badge-soon">Awaiting approval</span>{% endif %}
         </td>
-        <td>{% if u.role == 'admin' %}<span class="chip chip-snoozed">admin</span>{% else %}<span class="text-muted">member</span>{% endif %}</td>
-        <td class="text-muted">{{ u.created_text }}</td>
-        <td class="text-muted">{{ u.last_seen_text }}</td>
-        <td class="uactions">
-          <form method="post" action="/admin/users/{{ u.subject }}/approve">
-            <input type="hidden" name="approved" value="{{ '0' if u.approved else '1' }}">
-            <button class="btn {{ 'btn-secondary' if u.approved else 'btn-primary' }} btn-xs" type="submit">
-              {{ 'Revoke' if u.approved else 'Approve' }}
-            </button>
-          </form>
-          <form method="post" action="/admin/users/{{ u.subject }}/role">
-            <input type="hidden" name="role" value="{{ 'member' if u.role == 'admin' else 'admin' }}">
-            <button class="btn btn-secondary btn-xs" type="submit">
-              {{ 'Make member' if u.role == 'admin' else 'Make admin' }}
-            </button>
-          </form>
-          {% if u.subject != user.sub %}
-          <form method="post" action="/admin/users/{{ u.subject }}/delete">
-            <button class="btn btn-ghost btn-xs" type="submit">Remove</button>
-          </form>
-          {% endif %}
+        <td>{% if u.role == 'admin' %}<span class="badge badge-accent">admin</span>{% else %}<span class="muted">member</span>{% endif %}</td>
+        <td class="muted">{{ u.created_text }}</td>
+        <td class="muted">{{ u.last_seen_text }}</td>
+        <td>
+          <div class="uactions">
+            <form method="post" action="/admin/users/{{ u.subject }}/approve">
+              <input type="hidden" name="approved" value="{{ '0' if u.approved else '1' }}">
+              <button class="btn btn-sm{{ '' if u.approved else ' btn-primary' }}" type="submit">
+                {{ 'Revoke' if u.approved else 'Approve' }}
+              </button>
+            </form>
+            <form method="post" action="/admin/users/{{ u.subject }}/role">
+              <input type="hidden" name="role" value="{{ 'member' if u.role == 'admin' else 'admin' }}">
+              <button class="btn btn-sm" type="submit">
+                {{ 'Make member' if u.role == 'admin' else 'Make admin' }}
+              </button>
+            </form>
+            {% if u.subject != user.sub %}
+            <form method="post" action="/admin/users/{{ u.subject }}/delete">
+              <button class="btn btn-ghost btn-sm" type="submit">Remove</button>
+            </form>
+            {% endif %}
+          </div>
         </td>
       </tr>
       {% endfor %}
@@ -59,6 +61,6 @@
   </table>
 </div>
 {% else %}
-<p class="empty-line">Nobody has signed in yet.</p>
+<div class="card empty"><h2>Nobody has signed in yet</h2></div>
 {% endif %}
 {% endblock %}

@@ -120,7 +120,7 @@ def test_actions_reject_anonymous_writes(client, path, data):
 
 def test_sign_in_page_shows_nothing_about_the_fleet(client):
     body = client.get("/login").text
-    assert "Nothing expires without you knowing." in body
+    assert "Sign in" in body
     # No vehicle, owner, or count is visible before approval.
     for leak in ("KL04AS1371", "Priya Nair", "overdue", "vehicles tracked"):
         assert leak not in body
@@ -150,7 +150,7 @@ def test_unapproved_account_is_bounced_to_the_waiting_room(client):
         # The waiting room itself is reachable, and says nothing about the fleet.
         page = client.get("/pending")
         assert page.status_code == 200
-        assert "waiting for an administrator" in page.text
+        assert "hasn't granted access yet" in page.text
         assert "KL04AS1371" not in page.text
 
 
@@ -207,16 +207,16 @@ def test_dashboard_tiles_count_the_fleet(signed_in):
 
 def test_matrix_renders_chips_and_plain_dates(signed_in):
     body = signed_in.get("/fleet").text
-    assert 'class="chip chip-soon">5d<' in body
-    assert 'class="chip chip-overdue">−11d<' in body
-    assert 'class="cell-plain"' in body
-    assert 'class="cell-na"' in body
+    assert 'class="badge badge-soon">5d<' in body
+    assert 'class="badge badge-over">−11d<' in body
+    assert 'class="plain"' in body
+    assert 'class="na"' in body
 
 
 def test_snoozed_document_is_struck_through_and_tagged(signed_in):
     body = signed_in.get("/fleet").text
-    assert 'class="cell-struck">−67d<' in body
-    assert 'class="chip chip-snoozed">snoozed<' in body
+    assert 'class="struck">−67d<' in body
+    assert 'class="badge badge-mute">snoozed<' in body
 
 
 def test_fleet_filters(signed_in):
@@ -258,7 +258,7 @@ def test_vehicle_detail_shows_every_column_and_the_ladder(signed_in):
         assert f"<dt>{label}</dt>" in body
     assert "LMV" in body and "Petrol" in body
     assert "1 of 9 reminders sent" in body
-    assert "ladder-step" in body
+    assert 'class="step' in body
 
 
 def test_vehicle_detail_404s_for_an_unknown_registration(signed_in):
@@ -404,7 +404,7 @@ def test_admin_sees_the_user_list_with_pending_first(as_admin):
         body = as_admin.get("/admin/users").text
     assert "new@example.com" in body
     assert "Awaiting approval" in body
-    assert 'class="badge">1<' in body       # the nav badge
+    assert 'class="navcount">1<' in body    # the nav badge
 
 
 def test_approving_an_account(as_admin):
@@ -446,3 +446,144 @@ def test_unknown_role_is_rejected(as_admin):
         r = as_admin.post("/admin/users/g-new/role", data={"role": "root"})
     assert r.status_code == 400
     role.assert_not_called()
+
+
+# ── adding and editing a vehicle ─────────────────────────────────────────
+
+
+NEW = {
+    "registration_number": "kl 09-zz 4242",
+    "nickname": "Jeep",
+    "owner_name": "Thomas V",
+    "vehicle_class": "LMV",
+    "fuel_type": "Diesel",
+    "permit_type": "",
+    "registration_date": "2021-06-01",
+    "insurance_valid_until": "2027-05-05",
+    "pucc_valid_until": "",
+    "fitness_valid_until": "",
+    "mv_tax_valid_until": "",
+    "permit_valid_until": "",
+}
+
+
+def test_add_form_renders_every_document_and_detail_input(signed_in):
+    body = signed_in.get("/vehicles/new").text
+    assert 'name="registration_number"' in body
+    for field, _, long in [
+        ("insurance_valid_until", "", "Insurance"),
+        ("pucc_valid_until", "", "Pollution (PUCC)"),
+        ("fitness_valid_until", "", "Fitness / RC"),
+        ("mv_tax_valid_until", "", "MV Tax"),
+        ("permit_valid_until", "", "Permit"),
+    ]:
+        assert f'name="{field}"' in body
+    for field in ("nickname", "owner_name", "vehicle_class", "fuel_type", "permit_type"):
+        assert f'name="{field}"' in body
+
+
+def test_new_is_not_swallowed_by_the_registration_route(signed_in):
+    # /vehicles/{registration} is declared after /vehicles/new; if the order
+    # ever flips, "new" gets treated as a registration and 404s.
+    assert signed_in.get("/vehicles/new").status_code == 200
+
+
+def test_adding_a_vehicle_writes_normalised_values(signed_in):
+    with patch("web.app.db.registration_exists", return_value=False), \
+         patch("web.app.db.create_vehicle", return_value={"id": 9}) as create:
+        r = signed_in.post("/vehicles/new", data=NEW, follow_redirects=False)
+
+    values = create.call_args.args[0]
+    assert values["registration_number"] == "KL09ZZ4242"     # spaces stripped
+    assert values["nickname"] == "Jeep"
+    assert values["insurance_valid_until"] == date(2027, 5, 5)
+    assert values["pucc_valid_until"] is None                # blank → NULL
+    assert values["permit_type"] is None                     # blank → NULL
+    assert "_existing" not in values                         # internal marker
+    assert r.headers["location"].startswith("/vehicles/KL09ZZ4242?")
+
+
+def test_adding_a_duplicate_registration_is_a_field_error(signed_in):
+    with patch("web.app.db.registration_exists", return_value=True), \
+         patch("web.app.db.create_vehicle") as create:
+        r = signed_in.post("/vehicles/new", data=NEW)
+    create.assert_not_called()
+    assert r.status_code == 200                    # form redisplayed, not a redirect
+    assert "already tracked" in r.text
+
+
+def test_add_form_redisplays_errors_without_losing_input(signed_in):
+    bad = dict(NEW, registration_number="", nickname="Jeep")
+    with patch("web.app.db.create_vehicle") as create:
+        r = signed_in.post("/vehicles/new", data=bad)
+    create.assert_not_called()
+    assert "A registration number is required." in r.text
+    assert 'value="Jeep"' in r.text                 # what was typed survives
+
+
+def test_add_survives_a_unique_violation_that_beat_the_check(signed_in):
+    # The pre-check is racy; the constraint is the real guard, and losing
+    # that race must be a field error rather than a 500.
+    from psycopg2 import errors as pgerrors
+    with patch("web.app.db.registration_exists", return_value=False), \
+         patch("web.app.db.create_vehicle", side_effect=pgerrors.UniqueViolation()):
+        r = signed_in.post("/vehicles/new", data=NEW)
+    assert r.status_code == 200
+    assert "already tracked" in r.text
+
+
+def test_edit_form_is_prefilled_from_the_vehicle(signed_in):
+    body = signed_in.get("/vehicles/KL04AS1371/edit").text
+    assert 'value="KL04AS1371"' in body
+    assert 'value="Swift"' in body
+    assert 'value="LMV"' in body
+    assert 'value="Petrol"' in body
+
+
+def test_edit_form_404s_for_an_unknown_vehicle(signed_in):
+    assert signed_in.get("/vehicles/NOPE/edit").status_code == 404
+
+
+def test_saving_an_edit_updates_by_id(signed_in):
+    changed = dict(NEW, registration_number="KL04AS1371", nickname="Swift VXI")
+    with patch("web.app.db.registration_exists", return_value=False), \
+         patch("web.app.db.update_vehicle", return_value={"id": 1}) as update:
+        r = signed_in.post("/vehicles/KL04AS1371/edit", data=changed, follow_redirects=False)
+
+    vehicle_id, values = update.call_args.args
+    assert vehicle_id == 1                          # keyed on id, not registration
+    assert values["nickname"] == "Swift VXI"
+    assert r.headers["location"].startswith("/vehicles/KL04AS1371?")
+
+
+def test_edit_can_change_the_registration_and_redirects_to_the_new_one(signed_in):
+    renamed = dict(NEW, registration_number="KL04AS9999")
+    with patch("web.app.db.registration_exists", return_value=False), \
+         patch("web.app.db.update_vehicle", return_value={"id": 1}):
+        r = signed_in.post("/vehicles/KL04AS1371/edit", data=renamed, follow_redirects=False)
+    assert r.headers["location"].startswith("/vehicles/KL04AS9999?")
+
+
+def test_edit_uniqueness_check_excludes_the_vehicle_itself(signed_in):
+    same = dict(NEW, registration_number="KL04AS1371")
+    with patch("web.app.db.registration_exists", return_value=False) as exists, \
+         patch("web.app.db.update_vehicle", return_value={"id": 1}):
+        signed_in.post("/vehicles/KL04AS1371/edit", data=same, follow_redirects=False)
+    # Without excluding_id the vehicle would collide with its own row.
+    assert exists.call_args.kwargs == {"excluding_id": 1}
+
+
+def test_edit_rejects_taking_another_vehicles_registration(signed_in):
+    clash = dict(NEW, registration_number="KL07CH8842")
+    with patch("web.app.db.registration_exists", return_value=True), \
+         patch("web.app.db.update_vehicle") as update:
+        r = signed_in.post("/vehicles/KL04AS1371/edit", data=clash)
+    update.assert_not_called()
+    assert "already tracked" in r.text
+
+
+def test_add_and_edit_reject_anonymous_writes(client):
+    for path in ("/vehicles/new", "/vehicles/KL04AS1371/edit"):
+        r = client.post(path, data=NEW, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/login"
+        assert client.get(path, follow_redirects=False).headers["location"] == "/login"

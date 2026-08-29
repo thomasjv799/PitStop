@@ -3,23 +3,23 @@
 {% block title %}Awaiting approval · PitStop{% endblock %}
 
 {% block body %}
-<main class="signin-wrap">
-  <div class="card elev-md waiting">
-    <div class="signin-brand">{{ mark(20, 2) }}<span>PitStop</span></div>
-    <h1>You're signed in — but not approved yet</h1>
-    <p>
-      Your account (<b>{{ user.email or user.sub }}</b>) has been recorded and is
-      waiting for an administrator to grant access. Nothing about the fleet is
+<main class="centered">
+  <div class="card authcard">
+    <div class="brand">{{ mark(22) }}PitStop</div>
+    <h1>Awaiting approval</h1>
+    <p class="authlead">
+      You're signed in as <b>{{ user.email or user.sub }}</b>, but an
+      administrator hasn't granted access yet. Nothing about the fleet is
       visible until then.
     </p>
     {% if admin_email %}
-    <p class="text-muted" style="font-size:12px">
+    <p class="authlead muted" style="font-size:12px">
       The administrator for this instance is <b>{{ admin_email }}</b>.
     </p>
     {% endif %}
-    <div class="waiting-actions">
+    <div class="waitactions">
       <a class="btn btn-primary" href="/pending">Check again</a>
-      <form method="post" action="/logout"><button class="btn btn-secondary" type="submit">Sign out</button></form>
+      <form method="post" action="/logout"><button class="btn" type="submit">Sign out</button></form>
     </div>
   </div>
 </main>

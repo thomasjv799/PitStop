@@ -4,12 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}PitStop{% endblock %}</title>
-<link rel="stylesheet" href="{{ url_for('static', path='nocturne.css') }}">
+<script>
+// Applied before first paint so a dark-theme viewer never sees a white flash.
+// No stored choice means "follow the OS", which the CSS handles on its own.
+(function () {
+  try {
+    var t = localStorage.getItem("pitstop-theme");
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+  } catch (e) {}
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="{{ url_for('static', path='theme.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><circle cx='20' cy='20' r='17' fill='none' stroke='%239184d9' stroke-width='3'/><path d='M20 20 L20 6' stroke='%239184d9' stroke-width='3'/><path d='M20 20 L31 27' stroke='%23e9e9ed' stroke-width='3'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563eb' stroke-width='2.2' stroke-linecap='round'><circle cx='12' cy='12' r='9'/><path d='M12 12V7M12 12l4 2.5'/></svg>">
 </head>
 <body>
 {% block body %}{% endblock %}
 {% block scripts %}{% endblock %}
+<script src="{{ url_for('static', path='app.js') }}"></script>
 </body>
 </html>

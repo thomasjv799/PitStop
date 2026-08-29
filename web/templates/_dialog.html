@@ -1,32 +1,31 @@
-{# One dialog per page, filled from whichever cell was clicked.
-   `back` is where the action redirects to when it is done. #}
-<div class="dialog-backdrop" id="doc-dialog" hidden>
+{# One document-action dialog per page, filled from whichever cell was
+   clicked. `back` is where the action redirects when it is done. #}
+<div class="backdrop" id="doc-dialog" hidden>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
-    <div class="dialog-title" id="dlg-title">
-      <span data-slot="label"></span><span class="reg" data-slot="reg"></span>
-    </div>
-    <div class="dialog-body" data-slot="state"></div>
-    <div class="ladder-note" data-slot="ladder"></div>
+    <h2 id="dlg-title"><span data-slot="label"></span></h2>
+    <p class="dialog-sub">
+      <span data-slot="state"></span><br>
+      <span class="muted" data-slot="ladder"></span>
+    </p>
 
     <form method="post" data-form="renew">
       <input type="hidden" name="field" data-slot="field">
       <input type="hidden" name="back" value="{{ back }}">
-      <div class="row">
-        <div class="field">
-          <label for="dlg-date">New expiry date</label>
-          <input class="input" type="date" id="dlg-date" name="new_date" required>
-        </div>
+      <div class="field">
+        <label for="dlg-date">New expiry date</label>
+        <input class="input" type="date" id="dlg-date" name="new_date" required>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" type="button" data-action="close">Cancel</button>
         <button class="btn btn-primary" type="submit">Renew</button>
       </div>
     </form>
 
-    <hr class="rule-soft">
-
-    <form method="post" data-form="snooze">
+    <form method="post" data-form="snooze" style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px">
       <input type="hidden" name="field" data-slot="field">
       <input type="hidden" name="back" value="{{ back }}">
       <div class="field">
-        <label>Or stop reminding me</label>
+        <label>Or pause reminders</label>
         <div class="seg">
           {% for value, label in snooze_options %}
           <label class="seg-opt">
@@ -40,17 +39,16 @@
         <input class="input" type="text" id="dlg-reason" name="reason" placeholder="e.g. vehicle being sold">
       </div>
       <div class="dialog-actions">
-        <button class="btn btn-secondary" type="button" data-action="close">Cancel</button>
-        <button class="btn btn-secondary" type="submit">Snooze</button>
+        <button class="btn" type="submit">Snooze</button>
       </div>
     </form>
 
-    <form method="post" data-form="unsnooze" hidden>
+    <form method="post" data-form="unsnooze" style="border-top:1px solid var(--border);padding-top:16px;margin-top:16px" hidden>
       <input type="hidden" name="field" data-slot="field">
       <input type="hidden" name="back" value="{{ back }}">
       <div class="dialog-actions" style="margin:0">
-        <button class="btn btn-secondary" type="button" data-action="close">Cancel</button>
-        <button class="btn btn-primary" type="submit">Unsnooze — resume reminders</button>
+        <button class="btn" type="button" data-action="close">Cancel</button>
+        <button class="btn btn-primary" type="submit">Resume reminders</button>
       </div>
     </form>
   </div>

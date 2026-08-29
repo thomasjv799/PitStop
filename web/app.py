@@ -23,6 +23,11 @@ from web.config import (
     SOON_DAYS, TIMELINE_FUTURE, TIMELINE_PAST, settings,
 )
 
+try:                                    # psycopg2 is present in every runtime
+    from psycopg2 import errors as pgerrors
+except ImportError:                     # pragma: no cover - import-time safety
+    pgerrors = None
+
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent
@@ -43,11 +48,23 @@ templates.env.globals.update(
     documents=DOCUMENTS,
     snooze_options=SNOOZE_OPTIONS,
     soon_days=SOON_DAYS,
+    detail_inputs=service.DETAIL_INPUTS,
+    vehicle_classes=service.VEHICLE_CLASSES,
+    fuel_types=service.FUEL_TYPES,
 )
 
 
 def _today() -> date:
     return date.today()
+
+
+def _greeting(name: str) -> str:
+    """`Good morning, Thomas`. Server local time — this is a single-timezone
+    homelab app, so the server clock is the user's clock."""
+    hour = datetime.now().hour
+    part = "morning" if hour < 12 else "afternoon" if hour < 17 else "evening"
+    first = (name or "").strip().split(" ")[0]
+    return f"Good {part}, {first}" if first else f"Good {part}"
 
 
 def _load_fleet(today: date, include_archived: bool = False) -> list[dict]:
@@ -162,6 +179,7 @@ def dashboard(
     return _page(
         request, "dashboard.html", "dashboard",
         user=user,
+        greeting=_greeting(user.get("name") or user.get("sub", "")),
         stats=service.summarise(fleet),
         queue=service.queue_items(fleet),
         sweep=_sweep_line(),
@@ -214,6 +232,103 @@ def timeline(request: Request, user: dict = Depends(auth.require_approved)):
             {"label": f"+{TIMELINE_FUTURE}d", "left": 100},
         ],
     )
+
+
+# ── adding and editing a vehicle ─────────────────────────────────────────
+
+
+def _vehicle_form(request: Request, user: dict, *, form: dict, errors: dict,
+                  vehicle: Optional[dict] = None, **extra):
+    return _page(
+        request, "vehicle_form.html", "fleet", user=user,
+        form=form, errors=errors, vehicle=vehicle,
+        mode="edit" if vehicle else "new", **extra,
+    )
+
+
+@app.get("/vehicles/new", response_class=HTMLResponse)
+def new_vehicle(request: Request, user: dict = Depends(auth.require_approved)):
+    return _vehicle_form(request, user, form=service.blank_form(), errors={})
+
+
+@app.post("/vehicles/new")
+async def create_vehicle(request: Request, user: dict = Depends(auth.require_approved)):
+    form = dict(await request.form())
+    checked = service.validate_vehicle(form)
+    errors = dict(checked["errors"])
+    values = checked["values"]
+
+    registration = values["registration_number"]
+    if not errors and db.registration_exists(registration):
+        errors["registration_number"] = f"{registration} is already tracked."
+
+    if errors:
+        return _vehicle_form(request, user, form=form, errors=errors)
+
+    values.pop("_existing", None)
+    try:
+        db.create_vehicle(values)
+    except Exception as exc:
+        # The uniqueness check above is racy; the constraint is the real
+        # guard, so a violation here is a field error, not a 500.
+        if pgerrors and isinstance(exc, pgerrors.UniqueViolation):
+            return _vehicle_form(
+                request, user, form=form,
+                errors={"registration_number": f"{registration} is already tracked."},
+            )
+        logger.exception("could not create vehicle %s", registration)
+        return _vehicle_form(
+            request, user, form=form,
+            errors={"registration_number": "Could not save that vehicle."},
+        )
+
+    logger.info("%s added vehicle %s", auth.actor(user), registration)
+    return _back(f"/vehicles/{registration}", notice=f"{registration} added.")
+
+
+@app.get("/vehicles/{registration}/edit", response_class=HTMLResponse)
+def edit_vehicle(
+    request: Request, registration: str,
+    user: dict = Depends(auth.require_approved),
+):
+    vehicle = db.get_vehicle(registration)
+    if not vehicle:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"No vehicle {registration}")
+    return _vehicle_form(
+        request, user, form=service.form_from_vehicle(vehicle), errors={}, vehicle=vehicle
+    )
+
+
+@app.post("/vehicles/{registration}/edit")
+async def save_vehicle(
+    request: Request, registration: str,
+    user: dict = Depends(auth.require_approved),
+):
+    vehicle = db.get_vehicle(registration)
+    if not vehicle:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"No vehicle {registration}")
+
+    form = dict(await request.form())
+    checked = service.validate_vehicle(form, existing_registration=registration)
+    errors = dict(checked["errors"])
+    values = checked["values"]
+    new_registration = values["registration_number"]
+
+    if not errors and db.registration_exists(new_registration, excluding_id=vehicle["id"]):
+        errors["registration_number"] = f"{new_registration} is already tracked."
+
+    if errors:
+        return _vehicle_form(request, user, form=form, errors=errors, vehicle=vehicle)
+
+    values.pop("_existing", None)
+    if not db.update_vehicle(vehicle["id"], values):
+        return _vehicle_form(
+            request, user, form=form, vehicle=vehicle,
+            errors={"registration_number": "Could not save that vehicle."},
+        )
+
+    logger.info("%s edited vehicle %s", auth.actor(user), registration)
+    return _back(f"/vehicles/{new_registration}", notice="Changes saved.")
 
 
 @app.get("/vehicles/{registration}", response_class=HTMLResponse)

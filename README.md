@@ -197,6 +197,8 @@ the instance with nobody able to undo it.
 | `/fleet` | The document matrix — one row per vehicle, five document columns |
 | `/timeline` | A −60d…+90d rail with every document in the window plotted against today |
 | `/vehicles/<reg>` | Every column on the vehicle, plus each document's nine-step reminder ladder |
+| `/vehicles/new` | Add a vehicle |
+| `/vehicles/<reg>/edit` | Edit every detail and expiry date |
 | `/costs` | Stub — premium and tax tracking, not built yet |
 | `/admin/users` | Approve and manage sign-ins (admins only) |
 
@@ -221,9 +223,17 @@ drops out of the fleet, the cron sweep and the bot, and an *Archived* filter
 brings it back. *Delete* is permanent — it removes the vehicle and cascades its
 reminder history — and requires the registration typed back to confirm.
 
-The look is the Nocturne design system, vendored to `web/static/nocturne.css`
-from the Claude Design project *PitStop SSO UI mockups*. Re-export it rather
-than editing it by hand.
+**Adding and editing.** Only the registration number is required; everything
+else can be filled in later. Registration marks are normalised on the way in,
+so `KL 04-AS 1371` and `kl04as1371` are the same vehicle and the bot, the cron
+sweep and the web app never disagree about which one you meant. The form
+refuses a duplicate registration, and refuses an expiry date that falls before
+the vehicle was registered — that is a typo, not a lapsed document.
+
+**Themes.** Light and dark, with a three-way control in the header: follow the
+system, force light, force dark. The choice is remembered per browser and
+applied before first paint. Design tokens live in `web/static/theme.css`;
+`web/static/app.css` holds layout only and introduces no colour of its own.
 
 ---
 

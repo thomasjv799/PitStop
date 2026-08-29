@@ -1,40 +1,42 @@
 {% extends "_shell.html" %}
-{% from "_macros.html" import chip, cellattrs %}
+{% from "_macros.html" import badge, cellattrs %}
 {% block title %}{{ v.nickname }} · PitStop{% endblock %}
 
 {% block main %}
 <div class="pagehead">
   <div>
     <div class="crumb"><a href="/fleet">Fleet</a> / {{ v.registration_number }}</div>
-    <h1>{{ v.nickname }}{% if v.archived %} <span class="chip chip-snoozed">archived</span>{% endif %}</h1>
+    <h1>{{ v.nickname }}{% if v.archived %} <span class="badge badge-mute">archived</span>{% endif %}</h1>
     <div class="sub">{{ v.registration_number }}{% if v.owner_name %} · {{ v.owner_name }}{% endif %}</div>
   </div>
-  <div class="filters">
-    {% if v.archived %}
+  <div class="headactions">
+    <a class="btn" href="/vehicles/{{ v.registration_number }}/edit">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/></svg>
+      Edit
+    </a>
     <form method="post" action="/vehicles/{{ v.registration_number }}/archive">
-      <input type="hidden" name="archived" value="0">
-      <button class="btn btn-primary btn-xs" type="submit">Restore</button>
+      <input type="hidden" name="archived" value="{{ '0' if v.archived else '1' }}">
+      <button class="btn{% if v.archived %} btn-primary{% endif %}" type="submit">
+        {{ 'Restore' if v.archived else 'Archive' }}
+      </button>
     </form>
-    {% else %}
-    <form method="post" action="/vehicles/{{ v.registration_number }}/archive">
-      <input type="hidden" name="archived" value="1">
-      <button class="btn btn-secondary btn-xs" type="submit">Archive</button>
-    </form>
-    {% endif %}
-    <button class="btn btn-danger btn-xs" type="button" data-action="open-delete">Delete</button>
+    <button class="btn btn-danger" type="button" data-action="open-delete">Delete</button>
   </div>
 </div>
 
 <div class="detail">
 
-  <section class="detail-docs">
-    <h2 class="sectionhead">Documents<span class="sub">click a row to renew or snooze</span></h2>
+  <div class="card">
+    <div class="card-head">
+      <h2>Documents</h2>
+      <span class="sub">click a row to renew or snooze</span>
+    </div>
     {% for doc in v.documents %}
-    <button type="button" class="docrow doc"
+    <button type="button" class="docrow"
             {{ cellattrs(doc, v.id, v.registration_number, v.nickname) }}>
       <div class="docrow-head">
         <span class="docrow-label">{{ doc.long_label }}</span>
-        <span class="docrow-state">{{ chip(doc) }}</span>
+        <span>{{ badge(doc) }}</span>
       </div>
       <div class="docrow-sub">
         {% if doc.date %}{{ doc.long_date_text }}{% else %}No date recorded{% endif %}
@@ -45,38 +47,42 @@
       {% if doc.date %}
       <div class="ladder" aria-hidden="true">
         {% for step in doc.ladder %}
-        <span class="ladder-step{% if step.fired %} is-fired{% endif %}{% if step.is_next %} is-next{% endif %} ladder-{{ doc.status }}"
+        <span class="step{% if step.fired %} fired{% endif %}{% if step.is_next %} next{% endif %} {{ 'over' if doc.status == 'overdue' else doc.status }}"
               title="{{ step.label }} · {{ step.date_text }}{% if step.fired %} · sent{% endif %}"></span>
-        {% if loop.index == 4 %}<span class="ladder-now"></span>{% endif %}
+        {% if loop.index == 4 %}<span class="nowtick"></span>{% endif %}
         {% endfor %}
       </div>
       {% endif %}
     </button>
     {% endfor %}
-  </section>
+  </div>
 
-  <section class="detail-fields">
-    <h2 class="sectionhead">Details</h2>
-    <dl class="fieldlist">
-      {% for f in v.fields %}
-      <dt>{{ f.label }}</dt>
-      <dd{% if f.empty %} class="text-muted"{% endif %}>{{ f.value }}</dd>
-      {% endfor %}
-    </dl>
-  </section>
+  <div class="sidecol">
+    <div class="card">
+      <div class="card-head"><h2>Details</h2>
+        <a class="btn btn-ghost btn-sm" href="/vehicles/{{ v.registration_number }}/edit">Edit</a>
+      </div>
+      <dl class="fieldlist">
+        {% for f in v.fields %}
+        <dt>{{ f.label }}</dt>
+        <dd{% if f.empty %} class="muted"{% endif %}>{{ f.value }}</dd>
+        {% endfor %}
+      </dl>
+    </div>
+  </div>
 
 </div>
 
 <!-- Permanent deletion. The registration must be typed back: this is the one
      action in the app with no undo. -->
-<div class="dialog-backdrop" id="delete-dialog" hidden>
+<div class="backdrop" id="delete-dialog" hidden>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="del-title">
-    <div class="dialog-title" id="del-title">Delete {{ v.nickname }}?</div>
-    <div class="dialog-body">
+    <h2 id="del-title">Delete {{ v.nickname }}?</h2>
+    <p class="dialog-sub">
       This permanently removes <b>{{ v.registration_number }}</b> and its entire
       reminder history. It cannot be undone. To keep the record but stop
       reminders, use <b>Archive</b> instead.
-    </div>
+    </p>
     <form method="post" action="/vehicles/{{ v.registration_number }}/delete">
       <div class="field">
         <label for="del-confirm">Type <b>{{ v.registration_number }}</b> to confirm</label>
@@ -84,15 +90,12 @@
                autocomplete="off" spellcheck="false" required>
       </div>
       <div class="dialog-actions">
-        <button class="btn btn-secondary" type="button" data-action="close">Cancel</button>
-        <button class="btn btn-danger" type="submit">Delete permanently</button>
+        <button class="btn" type="button" data-action="close">Cancel</button>
+        <button class="btn btn-danger-solid" type="submit">Delete permanently</button>
       </div>
     </form>
   </div>
 </div>
 {% endblock %}
 
-{% block scripts %}
-{% include "_dialog.html" with context %}
-<script src="{{ url_for('static', path='app.js') }}"></script>
-{% endblock %}
+{% block scripts %}{% include "_dialog.html" with context %}{% endblock %}

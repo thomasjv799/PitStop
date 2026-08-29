@@ -5,65 +5,69 @@
 {% block main %}
 <div class="pagehead">
   <div>
-    <h1>Dashboard</h1>
-    <div class="sub">{{ today_text }}{% if sweep %} · {{ sweep }}{% endif %}</div>
+    <h1>{{ greeting }}</h1>
+    <div class="sub">
+      {% if stats.attention %}
+        {{ stats.attention }} vehicle{{ '' if stats.attention == 1 else 's' }} need attention today
+      {% else %}Everything is in order today{% endif %}
+      · {{ today_text }}{% if sweep %} · {{ sweep }}{% endif %}
+    </div>
   </div>
-  <a class="btn btn-secondary btn-xs" href="/fleet">Open fleet →</a>
+  <div class="headactions">
+    <a class="btn" href="/fleet">Open fleet</a>
+    <a class="btn btn-primary" href="/vehicles/new">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Add vehicle
+    </a>
+  </div>
 </div>
 
 <div class="tiles">
-  <a class="tile" href="/fleet">
-    <b>{{ stats.total }}</b><span>vehicle{{ '' if stats.total == 1 else 's' }} tracked</span>
-  </a>
-  <a class="tile is-over" href="/fleet?scope=attention">
-    <b>{{ stats.overdue }}</b><span>overdue</span>
-  </a>
-  <a class="tile is-soon" href="/fleet?scope=attention">
-    <b>{{ stats.soon }}</b><span>due within {{ soon_days }} days</span>
-  </a>
-  <a class="tile" href="/timeline">
-    <b>{{ stats.total - stats.attention }}</b><span>clear</span>
-  </a>
+  <a class="tile" href="/fleet"><b>{{ stats.total }}</b><span>vehicle{{ '' if stats.total == 1 else 's' }} tracked</span></a>
+  <a class="tile over" href="/fleet?scope=attention"><b>{{ stats.overdue }}</b><span>overdue</span></a>
+  <a class="tile soon" href="/fleet?scope=attention"><b>{{ stats.soon }}</b><span>due within {{ soon_days }} days</span></a>
+  <a class="tile ok" href="/timeline"><b>{{ stats.total - stats.attention }}</b><span>clear</span></a>
 </div>
 
-<h2 class="sectionhead">
-  Needs attention
-  <span class="sub">{{ queue | length }} document{{ '' if queue | length == 1 else 's' }} · nearest expiry first</span>
-</h2>
-
-{% if queue %}
-<div class="queue">
-  {% for item in queue %}
-  <div class="qcard qcard-{{ item.status }}">
-    <div class="qcard-main">
-      <div class="qcard-top">
-        <a class="qcard-name" href="/vehicles/{{ item.registration_number }}">{{ item.nickname }}</a>
-        <span class="reg">{{ item.registration_number }}</span>
-      </div>
-      <div class="qcard-line status-{{ item.status }}">{{ item.headline }}</div>
-      <div class="qcard-meta">
-        {% if item.owner_name %}{{ item.owner_name }} · {% endif %}{{ item.long_date_text }}
-        {%- if item.status == 'snoozed' %}
-          {%- if item.snooze_reason %} · “{{ item.snooze_reason }}”{% endif %}
-          {%- if item.snooze_by %} · set by {{ item.snooze_by }}{% endif %}
-        {%- else %} · {{ item.reminders_sent }} of {{ item.reminders_total }} reminders sent
-          {%- if item.next_offset_date %} · next {{ item.next_offset_date }}{% endif %}
-        {%- endif %}
-      </div>
-    </div>
-    <button type="button" class="btn btn-primary btn-xs doc"
-            {{ cellattrs(item, item.vehicle_id, item.registration_number, item.nickname) }}>
-      {% if item.status == 'snoozed' %}Unsnooze{% else %}Act{% endif %}
-    </button>
+<div class="card queue">
+  <div class="card-head">
+    <h2>Needs attention</h2>
+    <span class="sub">{{ queue | length }} document{{ '' if queue | length == 1 else 's' }} · nearest expiry first</span>
   </div>
-  {% endfor %}
+
+  {% if queue %}
+    {% for item in queue %}
+    <div class="qrow{% if item.status == 'snoozed' %} snoozed{% endif %}">
+      <span class="qdot {{ 'over' if item.status == 'overdue' else item.status }}">{{ item.days_text }}</span>
+      <div class="qmain">
+        <div class="qtop">
+          <a class="qname" href="/vehicles/{{ item.registration_number }}">{{ item.nickname }}</a>
+          <span class="vreg" style="display:inline">{{ item.registration_number }}</span>
+        </div>
+        <div class="qline t-{{ item.status }}">{{ item.headline }}</div>
+        <div class="qmeta">
+          {% if item.owner_name %}{{ item.owner_name }} · {% endif %}{{ item.long_date_text }}
+          {%- if item.status == 'snoozed' %}
+            {%- if item.snooze_reason %} · “{{ item.snooze_reason }}”{% endif %}
+            {%- if item.snooze_by %} · set by {{ item.snooze_by }}{% endif %}
+          {%- else %} · {{ item.reminders_sent }} of {{ item.reminders_total }} reminders sent
+            {%- if item.next_offset_date %} · next {{ item.next_offset_date }}{% endif %}
+          {%- endif %}
+        </div>
+      </div>
+      <button type="button" class="btn btn-sm{% if item.status != 'snoozed' %} btn-primary{% endif %}"
+              {{ cellattrs(item, item.vehicle_id, item.registration_number, item.nickname) }}>
+        {% if item.status == 'snoozed' %}Unsnooze{% else %}Resolve{% endif %}
+      </button>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">
+      <h2>Nothing needs attention</h2>
+      <p>Every document is more than {{ soon_days }} days out.</p>
+    </div>
+  {% endif %}
 </div>
-{% else %}
-<p class="empty-line">Nothing needs attention — every document is more than {{ soon_days }} days out.</p>
-{% endif %}
 {% endblock %}
 
-{% block scripts %}
-{% include "_dialog.html" with context %}
-<script src="{{ url_for('static', path='app.js') }}"></script>
-{% endblock %}
+{% block scripts %}{% include "_dialog.html" with context %}{% endblock %}

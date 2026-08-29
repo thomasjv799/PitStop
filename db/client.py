@@ -545,3 +545,77 @@ def delete_web_user(subject: str) -> bool:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM web_users WHERE subject = %(sub)s", {"sub": subject})
             return cur.rowcount > 0
+
+
+# ── creating and editing vehicles ────────────────────────────────────────
+
+
+# Columns the web form is allowed to write. `id`, `status`, `created_at` and
+# `updated_at` are deliberately absent: identity and lifecycle are not form
+# fields, and archiving goes through set_vehicle_archived.
+_WRITABLE_COLS = (
+    "registration_number", "nickname", "owner_name", "vehicle_class",
+    "fuel_type", "permit_type", "registration_date",
+    "insurance_valid_until", "pucc_valid_until", "fitness_valid_until",
+    "mv_tax_valid_until", "permit_valid_until",
+)
+
+
+def registration_exists(registration_number: str, excluding_id: Optional[int] = None) -> bool:
+    """Uniqueness check for the add/edit form.
+
+    Racy on its own — two simultaneous inserts could both pass — so the
+    insert also catches the unique-violation. This is here to produce a
+    readable field error in the normal case.
+    """
+    sql = "SELECT 1 FROM vehicles WHERE registration_number = %(reg)s"
+    params: dict = {"reg": registration_number}
+    if excluding_id is not None:
+        sql += " AND id <> %(skip)s"
+        params["skip"] = excluding_id
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return cur.fetchone() is not None
+
+
+def create_vehicle(values: dict) -> dict:
+    """Insert a vehicle and return the stored row.
+
+    Raises psycopg2.errors.UniqueViolation if the registration is taken —
+    the route turns that into a field error.
+    """
+    cols = [c for c in _WRITABLE_COLS if c in values]
+    sql = pgsql.SQL("INSERT INTO vehicles ({cols}) VALUES ({vals}) RETURNING {out}").format(
+        cols=pgsql.SQL(", ").join(pgsql.Identifier(c) for c in cols),
+        vals=pgsql.SQL(", ").join(pgsql.Placeholder(c) for c in cols),
+        out=pgsql.SQL(_VEHICLE_COLS),
+    )
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, {c: values[c] for c in cols})
+            return dict(cur.fetchone())
+
+
+def update_vehicle(vehicle_id: int, values: dict) -> Optional[dict]:
+    """Overwrite a vehicle's writable columns. Returns the stored row."""
+    cols = [c for c in _WRITABLE_COLS if c in values]
+    if not cols:
+        return None
+    sql = pgsql.SQL(
+        "UPDATE vehicles SET {sets}, updated_at = now() "
+        "WHERE id = %(vehicle_id)s RETURNING {out}"
+    ).format(
+        sets=pgsql.SQL(", ").join(
+            pgsql.SQL("{} = {}").format(pgsql.Identifier(c), pgsql.Placeholder(c))
+            for c in cols
+        ),
+        out=pgsql.SQL(_VEHICLE_COLS),
+    )
+    params = {c: values[c] for c in cols}
+    params["vehicle_id"] = vehicle_id
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            return dict(row) if row else None

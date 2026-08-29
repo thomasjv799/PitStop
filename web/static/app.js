@@ -1,20 +1,62 @@
-// Dialogs. One document-action dialog is reused across the dashboard, the
-// fleet matrix and the vehicle page: a click on any cell fills it from that
-// cell's data-* attributes and points the three forms at the right endpoints.
-// The vehicle page adds a second, delete-confirmation dialog.
+// Theme control and dialogs. Loaded on every page.
 (function () {
   "use strict";
+
+  // ── theme ──────────────────────────────────────────────────────────────
+  // Three states: "system" (no attribute, CSS follows prefers-color-scheme),
+  // "light" and "dark". base.html applies the stored choice before first
+  // paint; this only handles switching and the button's pressed state.
+
+  var KEY = "pitstop-theme";
+
+  function stored() {
+    try { return localStorage.getItem(KEY) || "system"; } catch (e) { return "system"; }
+  }
+
+  function applyTheme(choice) {
+    if (choice === "light" || choice === "dark") {
+      document.documentElement.dataset.theme = choice;
+    } else {
+      delete document.documentElement.dataset.theme;
+    }
+    try {
+      if (choice === "system") localStorage.removeItem(KEY);
+      else localStorage.setItem(KEY, choice);
+    } catch (e) { /* private mode — the choice just won't persist */ }
+    markPressed(choice);
+  }
+
+  function markPressed(choice) {
+    var buttons = document.querySelectorAll("[data-theme-set]");
+    Array.prototype.forEach.call(buttons, function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.themeSet === choice));
+    });
+  }
+
+  markPressed(stored());
+
+  document.addEventListener("click", function (event) {
+    var toggle = event.target.closest("[data-theme-set]");
+    if (toggle) applyTheme(toggle.dataset.themeSet);
+  });
+
+  // ── dialogs ────────────────────────────────────────────────────────────
+  // One document-action dialog is reused across the dashboard, the fleet
+  // matrix and the vehicle page: a click on any cell fills it from that
+  // cell's data-* attributes and points the three forms at the right
+  // endpoints. The vehicle page adds a delete-confirmation dialog.
 
   var dialog = document.getElementById("doc-dialog");
   var deleteDialog = document.getElementById("delete-dialog");
   if (!dialog && !deleteDialog) return;
 
   var lastTrigger = null;
+  var openDoc = null;
 
   function show(el) {
     if (!el) return;
     el.hidden = false;
-    var first = el.querySelector("input:not([type=hidden])");
+    var first = el.querySelector("input:not([type=hidden]):not([type=radio])");
     if (first) first.focus();
   }
 
@@ -27,12 +69,9 @@
     return [dialog, deleteDialog].some(function (el) { return el && !el.hidden; });
   }
 
-  // ── the document-action dialog ─────────────────────────────────────────
-
   if (dialog) {
     var slots = {
       label: dialog.querySelector('[data-slot="label"]'),
-      reg: dialog.querySelector('[data-slot="reg"]'),
       state: dialog.querySelector('[data-slot="state"]'),
       ladder: dialog.querySelector('[data-slot="ladder"]')
     };
@@ -52,28 +91,27 @@
       snoozed: function (d) {
         var text = d.snoozeUntil
           ? "Snoozed until " + d.snoozeUntil
-          : "Reminders ignored indefinitely";
+          : "Reminders paused indefinitely";
         if (d.snoozeReason) text += " — “" + d.snoozeReason + "”";
         if (d.snoozeBy) text += " · set by " + d.snoozeBy;
         return text + ".";
       }
     };
 
-    var ladderText = function (d) {
+    function ladderText(d) {
       if (d.status === "na") return "";
       var line = d.sent + " of " + d.total + " reminders sent";
-      if (d.status === "snoozed") return line + " · the sweep skips this document while snoozed.";
+      if (d.status === "snoozed") return line + " · the sweep skips this document while paused.";
       if (!d.nextOffset && d.nextOffset !== "0") return line + " · the schedule is exhausted.";
       var n = Number(d.nextOffset);
       return line + " · next at " + (n < 0 ? "−" : "+") + Math.abs(n) + "d, " + d.nextDate + ".";
-    };
+    }
 
-    var openDoc = function (button) {
+    openDoc = function (button) {
       var d = button.dataset;
       lastTrigger = button;
 
-      slots.label.textContent = d.label + " · " + d.nickname;
-      slots.reg.textContent = d.reg;
+      slots.label.textContent = d.label + " · " + d.nickname + " (" + d.reg + ")";
       slots.state.textContent = (STATE_TEXT[d.status] || STATE_TEXT.ok)(d);
       slots.ladder.textContent = ladderText(d);
 
@@ -91,8 +129,8 @@
       dateInput.value = d.date || "";
       reasonInput.value = d.snoozeReason || "";
 
-      // A snoozed document offers Unsnooze instead of another Snooze;
-      // renewing stays available either way.
+      // A paused document offers Resume instead of another Snooze; renewing
+      // stays available either way.
       var snoozed = d.status === "snoozed";
       forms.snooze.hidden = snoozed;
       forms.unsnooze.hidden = !snoozed;
@@ -101,12 +139,10 @@
     };
   }
 
-  // ── delegation ─────────────────────────────────────────────────────────
-
   document.addEventListener("click", function (event) {
     if (event.target.closest('[data-action="close"]')) { closeAll(); return; }
 
-    var cell = dialog && event.target.closest("button.doc");
+    var cell = openDoc && event.target.closest("[data-doc]");
     if (cell) { openDoc(cell); return; }
 
     if (event.target.closest('[data-action="open-delete"]')) {

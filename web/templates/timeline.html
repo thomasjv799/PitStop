@@ -13,12 +13,12 @@
 </div>
 
 {% if rows %}
-<div class="tl">
+<div class="card">
   <div class="tl-axis">
-    <span class="tl-label"></span>
-    <div class="tl-rail">
+    <span></span>
+    <div class="rail">
       {% for tick in ticks %}
-      <span class="tl-tick{% if tick.is_today %} is-today{% endif %}" style="left:{{ tick.left }}%">{{ tick.label }}</span>
+      <span class="tick{% if tick.is_today %} today{% endif %}" style="left:{{ tick.left }}%">{{ tick.label }}</span>
       {% endfor %}
     </div>
   </div>
@@ -26,13 +26,13 @@
   {% for row in rows %}
   <div class="tl-row">
     <a class="tl-label" href="/vehicles/{{ row.registration_number }}">
-      <span class="name">{{ row.nickname }}</span>
-      <span class="reg">{{ row.registration_number }}</span>
+      <span class="vname">{{ row.nickname }}</span>
+      <span class="vreg">{{ row.registration_number }}</span>
     </a>
-    <div class="tl-rail">
-      <span class="tl-today" style="left:{{ today_position }}%"></span>
+    <div class="rail">
+      <span class="nowline" style="left:{{ today_position }}%"></span>
       {% for m in row.marks %}
-      <span class="tl-mark tl-{{ m.status }}" style="left:{{ m.left }}%"
+      <span class="mark {{ 'over' if m.status == 'overdue' else m.status }}" style="left:{{ m.left }}%"
             title="{{ m.long_label }} · {{ m.date_text }} · {{ m.days_text }}">
         {{ m.label }}{% if m.status == 'snoozed' %} · snoozed{% endif %}
       </span>
@@ -47,6 +47,9 @@
   {{ past }} days overdue is pinned to the left edge.
 </p>
 {% else %}
-<p class="empty-line">Nothing expires in the next {{ future }} days.</p>
+<div class="card empty">
+  <h2>Nothing on the horizon</h2>
+  <p>No document expires in the next {{ future }} days.</p>
+</div>
 {% endif %}
 {% endblock %}
