@@ -20,7 +20,11 @@
         {{ 'Restore' if v.archived else 'Archive' }}
       </button>
     </form>
-    <button class="btn btn-danger" type="button" data-action="open-delete">Delete</button>
+    <button class="btn btn-danger" type="button" data-action="open-delete"
+            data-reg="{{ v.registration_number }}" data-nickname="{{ v.nickname }}">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+      Delete
+    </button>
   </div>
 </div>
 
@@ -73,29 +77,9 @@
 
 </div>
 
-<!-- Permanent deletion. The registration must be typed back: this is the one
-     action in the app with no undo. -->
-<div class="backdrop" id="delete-dialog" hidden>
-  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="del-title">
-    <h2 id="del-title">Delete {{ v.nickname }}?</h2>
-    <p class="dialog-sub">
-      This permanently removes <b>{{ v.registration_number }}</b> and its entire
-      reminder history. It cannot be undone. To keep the record but stop
-      reminders, use <b>Archive</b> instead.
-    </p>
-    <form method="post" action="/vehicles/{{ v.registration_number }}/delete">
-      <div class="field">
-        <label for="del-confirm">Type <b>{{ v.registration_number }}</b> to confirm</label>
-        <input class="input" type="text" id="del-confirm" name="confirm"
-               autocomplete="off" spellcheck="false" required>
-      </div>
-      <div class="dialog-actions">
-        <button class="btn" type="button" data-action="close">Cancel</button>
-        <button class="btn btn-danger-solid" type="submit">Delete permanently</button>
-      </div>
-    </form>
-  </div>
-</div>
 {% endblock %}
 
-{% block scripts %}{% include "_dialog.html" with context %}{% endblock %}
+{% block scripts %}
+{% include "_dialog.html" with context %}
+{% include "_delete_dialog.html" with context %}
+{% endblock %}

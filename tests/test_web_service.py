@@ -445,3 +445,17 @@ def test_blank_form_covers_every_input_the_template_renders():
     expected |= {f for f, _, _ in DOCUMENTS}
     assert set(blank) == expected
     assert all(v == "" for v in blank.values())
+
+
+def test_rows_report_whether_they_are_archived():
+    live = service.build_row(veh(1, "Swift", "KL04AS1371"), TODAY, {}, {})
+    assert live["archived"] is False
+
+    row = veh(1, "Swift", "KL04AS1371")
+    row["status"] = "archived"
+    assert service.build_row(row, TODAY, {}, {})["archived"] is True
+
+    # The column is free text on an externally-created table, so an unrelated
+    # value must not read as archived.
+    row["status"] = "ACTIVE"
+    assert service.build_row(row, TODAY, {}, {})["archived"] is False

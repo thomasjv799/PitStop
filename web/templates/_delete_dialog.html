@@ -1,0 +1,25 @@
+{# Permanent deletion, shared by the fleet list and the vehicle page. The
+   registration must be typed back: this is the one action with no undo, so
+   a misplaced click must not be enough to trigger it. Filled from the
+   trigger's data-* attributes. #}
+<div class="backdrop" id="delete-dialog" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="del-title">
+    <h2 id="del-title">Delete <span data-slot="del-name"></span>?</h2>
+    <p class="dialog-sub">
+      This permanently removes <b data-slot="del-reg"></b> and its entire
+      reminder history. It cannot be undone. To keep the record but stop
+      reminders, use <b>Archive</b> instead.
+    </p>
+    <form method="post" data-form="delete">
+      <div class="field">
+        <label for="del-confirm">Type <b data-slot="del-reg"></b> to confirm</label>
+        <input class="input mono" type="text" id="del-confirm" name="confirm"
+               autocomplete="off" spellcheck="false" autocapitalize="characters" required>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn" type="button" data-action="close">Cancel</button>
+        <button class="btn btn-danger-solid" type="submit">Delete permanently</button>
+      </div>
+    </form>
+  </div>
+</div>

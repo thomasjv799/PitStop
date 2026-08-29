@@ -53,6 +53,13 @@
   var lastTrigger = null;
   var openDoc = null;
 
+  // A slot may appear more than once in a dialog (the registration is both
+  // stated and asked for), so fill every match.
+  function fill(root, slot, text) {
+    var nodes = root.querySelectorAll('[data-slot="' + slot + '"]');
+    Array.prototype.forEach.call(nodes, function (n) { n.textContent = text || ""; });
+  }
+
   function show(el) {
     if (!el) return;
     el.hidden = false;
@@ -145,8 +152,16 @@
     var cell = openDoc && event.target.closest("[data-doc]");
     if (cell) { openDoc(cell); return; }
 
-    if (event.target.closest('[data-action="open-delete"]')) {
-      lastTrigger = event.target.closest("button");
+    var del = event.target.closest('[data-action="open-delete"]');
+    if (del && deleteDialog) {
+      lastTrigger = del;
+      // The dialog is shared by the fleet list and the vehicle page, so the
+      // trigger says which vehicle it is about.
+      fill(deleteDialog, "del-name", del.dataset.nickname || del.dataset.reg);
+      fill(deleteDialog, "del-reg", del.dataset.reg);
+      deleteDialog.querySelector('[data-form="delete"]').action =
+        "/vehicles/" + encodeURIComponent(del.dataset.reg) + "/delete";
+      deleteDialog.querySelector('input[name="confirm"]').value = "";
       show(deleteDialog);
       return;
     }

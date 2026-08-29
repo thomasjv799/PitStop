@@ -217,7 +217,8 @@ the overdue count.
   `platform:id` shape the bots write, so the cron sweep skips it exactly as it
   does for a snooze set from Discord.
 
-**Archive and delete** live on the vehicle page. *Archive* sets
+**Archive and delete** are on every row of the fleet list (edit / archive /
+delete, revealed on hover) and on the vehicle page. *Archive* sets
 `vehicles.status = 'archived'`: the row and its history stay, but the vehicle
 drops out of the fleet, the cron sweep and the bot, and an *Archived* filter
 brings it back. *Delete* is permanent — it removes the vehicle and cascades its

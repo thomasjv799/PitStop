@@ -134,6 +134,7 @@ def build_row(
         "nickname": vehicle.get("nickname") or vehicle["registration_number"],
         "registration_number": vehicle["registration_number"],
         "owner_name": vehicle.get("owner_name") or "",
+        "archived": (vehicle.get("status") or "").lower() == "archived",
         "cells": cells,
         # A row's own worst status, used for sorting and for the filter.
         "worst": (
@@ -373,7 +374,6 @@ def build_detail(
 
     return {
         **row,
-        "archived": (vehicle.get("status") or "").lower() == "archived",
         "fields": detail_fields(vehicle),
         "documents": documents,
     }

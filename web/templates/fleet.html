@@ -31,6 +31,7 @@
       <tr>
         <th>Vehicle</th>
         {% for field, short, long in documents %}<th>{{ short }}</th>{% endfor %}
+        <th class="acts-head"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
     <tbody>
@@ -49,6 +50,31 @@
           </button>
         </td>
         {% endfor %}
+        <td class="acts">
+          <div class="rowacts">
+            <a class="iconbtn" href="/vehicles/{{ row.registration_number }}/edit"
+               title="Edit {{ row.registration_number }}" aria-label="Edit {{ row.registration_number }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/></svg>
+            </a>
+            <form method="post" action="/vehicles/{{ row.registration_number }}/archive">
+              <input type="hidden" name="archived" value="{{ '0' if row.archived else '1' }}">
+              <button class="iconbtn" type="submit"
+                      title="{{ 'Restore' if row.archived else 'Archive' }} {{ row.registration_number }}"
+                      aria-label="{{ 'Restore' if row.archived else 'Archive' }} {{ row.registration_number }}">
+                {% if row.archived %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+                {% else %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11h14V8M10 12h4"/></svg>
+                {% endif %}
+              </button>
+            </form>
+            <button class="iconbtn danger" type="button" data-action="open-delete"
+                    data-reg="{{ row.registration_number }}" data-nickname="{{ row.nickname }}"
+                    title="Delete {{ row.registration_number }}" aria-label="Delete {{ row.registration_number }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+            </button>
+          </div>
+        </td>
       </tr>
       {% endfor %}
     </tbody>
@@ -71,4 +97,7 @@
 {% endif %}
 {% endblock %}
 
-{% block scripts %}{% include "_dialog.html" with context %}{% endblock %}
+{% block scripts %}
+{% include "_dialog.html" with context %}
+{% include "_delete_dialog.html" with context %}
+{% endblock %}

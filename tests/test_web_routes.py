@@ -587,3 +587,52 @@ def test_add_and_edit_reject_anonymous_writes(client):
         r = client.post(path, data=NEW, follow_redirects=False)
         assert r.status_code == 303 and r.headers["location"] == "/login"
         assert client.get(path, follow_redirects=False).headers["location"] == "/login"
+
+
+# ── row actions on the fleet list ────────────────────────────────────────
+
+
+def test_fleet_rows_offer_edit_archive_and_delete(signed_in):
+    # Delete used to exist only on the detail page, one level down, which
+    # made it effectively invisible from the list.
+    body = signed_in.get("/fleet").text
+    assert 'href="/vehicles/KL04AS1371/edit"' in body
+    assert 'action="/vehicles/KL04AS1371/archive"' in body
+    assert 'data-action="open-delete"' in body
+    assert 'data-reg="KL04AS1371"' in body
+    # And the shared confirm dialog is on the page to receive them.
+    assert 'id="delete-dialog"' in body
+    assert 'data-form="delete"' in body
+
+
+def test_fleet_row_offers_archive_for_a_live_vehicle(signed_in):
+    body = signed_in.get("/fleet").text
+    assert 'aria-label="Archive KL04AS1371"' in body
+    assert 'aria-label="Restore KL04AS1371"' not in body
+
+
+def test_archived_row_offers_restore_instead_of_archive(signed_in):
+    archived = [dict(VEHICLES[0], status="archived")]
+    with patch("web.app.db.get_archived_vehicles", return_value=archived):
+        body = signed_in.get("/fleet?scope=archived").text
+    assert 'aria-label="Restore KL04AS1371"' in body
+    assert 'aria-label="Archive KL04AS1371"' not in body
+    assert 'value="0"' in body          # the archive form posts un-archive
+
+
+def test_vehicle_page_delete_trigger_carries_its_vehicle(signed_in):
+    body = signed_in.get("/vehicles/KL04AS1371").text
+    assert 'data-action="open-delete"' in body
+    assert 'data-reg="KL04AS1371"' in body
+    assert 'data-nickname="Swift"' in body
+    assert 'id="delete-dialog"' in body
+
+
+def test_deleting_from_the_fleet_list_hits_the_same_endpoint(signed_in):
+    # The dialog is shared, so this is the detail page's path exercised from
+    # the list; the guard must behave identically.
+    with patch("web.app.db.delete_vehicle", return_value=True) as delete:
+        r = signed_in.post("/vehicles/KL04AS1371/delete",
+                           data={"confirm": "KL04AS1371"}, follow_redirects=False)
+    delete.assert_called_once_with("KL04AS1371")
+    assert r.headers["location"].startswith("/fleet?notice=")
