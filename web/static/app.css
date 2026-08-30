@@ -324,3 +324,18 @@ tr:hover .iconbtn, .iconbtn:focus-visible { opacity: 1; }
 
 .addrow { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin: 0; }
 .addrow .btn { flex: none; }
+
+/* ── dev-mode banner ──────────────────────────────────────────────────── */
+
+.devbanner {
+  padding: 9px 22px; text-align: center;
+  font-size: 12.5px; line-height: 1.5;
+  background: var(--over-soft); color: var(--over-text);
+  border-bottom: 1px solid color-mix(in srgb, var(--over) 30%, transparent);
+}
+.devbanner strong { font-weight: 700; }
+.devbanner code {
+  font-family: var(--font-mono); font-size: 11.5px;
+  padding: 1px 5px; border-radius: 4px;
+  background: color-mix(in srgb, var(--over) 12%, transparent);
+}

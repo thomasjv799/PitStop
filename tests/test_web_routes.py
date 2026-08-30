@@ -838,3 +838,13 @@ def test_redirect_uri_falls_back_to_the_request(client, monkeypatch):
     monkeypatch.setattr(app_module.auth, "begin_oidc", fake_begin)
     client.post("/login", follow_redirects=False)
     assert seen["uri"].endswith("/auth/callback")
+
+
+def test_dev_mode_says_so_on_every_page(signed_in):
+    """Dev mode signs in whoever asks, as an admin. Fine on localhost,
+    dangerous on a public URL — so it has to be visible, not a subtle badge."""
+    for path in ("/", "/fleet", "/timeline", "/costs"):
+        body = signed_in.get(path).text
+        assert "Dev mode" in body
+        assert "signed in as an" in body
+        assert "AUTH_MODE=google" in body

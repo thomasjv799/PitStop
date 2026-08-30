@@ -3,6 +3,15 @@
 
 {# Every signed-in page: nav, theme control, flash messages, page body. #}
 {% block body %}
+{% if user.mode == 'dev' %}
+{# Dev mode signs in whoever asks, as an admin. That is fine on localhost and
+   dangerous on a public URL, so say so where it cannot be missed. #}
+<div class="devbanner">
+  <strong>Dev mode</strong> — anyone who reaches this URL is signed in as an
+  administrator, with no password. Set <code>AUTH_MODE=google</code> before
+  leaving this deployed.
+</div>
+{% endif %}
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="/">{{ mark(20) }}PitStop</a>
