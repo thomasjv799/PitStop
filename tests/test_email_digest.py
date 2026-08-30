@@ -171,3 +171,86 @@ def test_an_http_error_never_raises(configured):
             raise RuntimeError("422 Unprocessable")
     with patch("utils.email_digest.requests.post", return_value=Resp()):
         assert ed.send_digest([item()], TODAY) is False
+
+
+# ── which offsets earn an email ──────────────────────────────────────────
+
+
+def test_default_offsets_are_a_week_before_and_the_day_before(monkeypatch):
+    monkeypatch.delenv("EMAIL_OFFSETS", raising=False)
+    assert ed.email_offsets() == {-7, -1}
+
+
+def test_offsets_are_configurable(monkeypatch):
+    monkeypatch.setenv("EMAIL_OFFSETS", "-7, -1, 7")
+    assert ed.email_offsets() == {-7, -1, 7}
+
+
+def test_unparseable_offsets_fall_back_rather_than_crashing(monkeypatch):
+    monkeypatch.setenv("EMAIL_OFFSETS", "banana, ,")
+    assert ed.email_offsets() == {-7, -1}
+    monkeypatch.setenv("EMAIL_OFFSETS", "-7, banana")
+    assert ed.email_offsets() == {-7}
+
+
+def test_select_keeps_only_emailed_offsets(monkeypatch):
+    monkeypatch.delenv("EMAIL_OFFSETS", raising=False)
+    items = [
+        dict(item(days=7), offset=-7),      # emailed
+        dict(item(days=3), offset=-3),      # Discord only
+        dict(item(days=1), offset=-1),      # emailed
+        dict(item(days=0), offset=0),       # Discord only
+        dict(item(days=-30), offset=30),    # Discord only
+    ]
+    assert [i["offset"] for i in ed.select_for_email(items)] == [-7, -1]
+
+
+def test_select_keeps_items_that_carry_no_offset(monkeypatch):
+    # A caller that does not track offsets still gets a digest.
+    monkeypatch.delenv("EMAIL_OFFSETS", raising=False)
+    assert len(ed.select_for_email([item(), item()])) == 2
+
+
+def test_send_skips_when_nothing_is_at_an_emailed_offset(configured, monkeypatch):
+    monkeypatch.delenv("EMAIL_OFFSETS", raising=False)
+    # The sweep fired, but only at offsets Discord handles.
+    items = [dict(item(days=0), offset=0), dict(item(days=-3), offset=3)]
+    with patch("utils.email_digest.requests.post") as post:
+        assert ed.send_digest(items, TODAY) is False
+    post.assert_not_called()
+
+
+def test_send_narrows_a_mixed_sweep_to_the_emailed_offsets(configured, monkeypatch):
+    monkeypatch.delenv("EMAIL_OFFSETS", raising=False)
+    items = [
+        dict(item(nickname="Weekly", days=7), offset=-7),
+        dict(item(nickname="Chatty", days=0), offset=0),
+        dict(item(nickname="Tomorrow", days=1), offset=-1),
+    ]
+    with patch("utils.email_digest.requests.post") as post:
+        assert ed.send_digest(items, TODAY) is True
+    body = post.call_args.kwargs["json"]
+    assert "Weekly" in body["text"] and "Tomorrow" in body["text"]
+    assert "Chatty" not in body["text"]
+
+
+# ── the footer describes the real cadence ────────────────────────────────
+
+
+def test_footer_states_the_default_cadence(monkeypatch):
+    monkeypatch.delenv("EMAIL_OFFSETS", raising=False)
+    _, html, text = ed.build_digest([item()], TODAY)
+    assert "a week before an expiry and again the day before" in html
+    assert "a week before an expiry and again the day before" in text
+
+
+def test_footer_follows_a_custom_cadence(monkeypatch):
+    monkeypatch.setenv("EMAIL_OFFSETS", "-30,-1,7")
+    _, html, _ = ed.build_digest([item()], TODAY)
+    # The email must never describe a schedule it does not actually keep.
+    assert "30 days before, the day before and 7 days after" in html
+
+
+def test_footer_still_points_at_discord_for_the_full_escalation():
+    _, html, _ = ed.build_digest([item()], TODAY)
+    assert "goes to Discord" in html

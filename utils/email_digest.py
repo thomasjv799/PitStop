@@ -19,6 +19,44 @@ logger = logging.getLogger(__name__)
 
 RESEND_ENDPOINT = "https://api.resend.com/emails"
 
+# Which of the sweep's nine offsets are worth an email.
+#
+# Discord gets all of them — a chat message is cheap and scrolls away. A
+# mailbox is not: at every offset, one document that nobody renews would
+# arrive nine times over five weeks. The default is a heads-up a week out and
+# a final nudge the day before, which is what the inbox is actually good for.
+#
+# Note this means a lapsed document stops emailing after -1. Add 7 to get one
+# follow-up a week after it expires.
+DEFAULT_EMAIL_OFFSETS = (-7, -1)
+
+
+def email_offsets() -> set[int]:
+    """The offsets that earn an email, from EMAIL_OFFSETS or the default."""
+    raw = os.getenv("EMAIL_OFFSETS", "").strip()
+    if not raw:
+        return set(DEFAULT_EMAIL_OFFSETS)
+    out = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            out.add(int(part))
+        except ValueError:
+            logger.warning("Ignoring unparseable EMAIL_OFFSETS entry %r", part)
+    return out or set(DEFAULT_EMAIL_OFFSETS)
+
+
+def select_for_email(items: Iterable[dict]) -> list[dict]:
+    """Keep only the reminders whose offset is worth mailing about.
+
+    An item with no `offset` is kept, so a caller that does not track them
+    still gets a digest.
+    """
+    wanted = email_offsets()
+    return [i for i in items if i.get("offset") is None or i["offset"] in wanted]
+
 # The same semantic palette the web app uses: red is overdue, amber is due,
 # and nothing else in the email carries a hue.
 _OVER = "#b42318"
@@ -111,6 +149,27 @@ def _row(item: dict) -> str:
       </tr>"""
 
 
+def _cadence_sentence() -> str:
+    """Describe, in the footer, when email actually arrives."""
+    offsets = sorted(email_offsets())
+    if set(offsets) == set(DEFAULT_EMAIL_OFFSETS):
+        return "You get an email a week before an expiry and again the day before."
+    parts = []
+    for o in offsets:
+        if o < -1:
+            parts.append(f"{-o} days before")
+        elif o == -1:
+            parts.append("the day before")
+        elif o == 0:
+            parts.append("on the day")
+        elif o == 1:
+            parts.append("the day after")
+        else:
+            parts.append(f"{o} days after")
+    joined = ", ".join(parts[:-1]) + (" and " + parts[-1] if len(parts) > 1 else parts[0])
+    return f"Email arrives {joined}."
+
+
 def build_digest(items: Iterable[dict], today: Optional[date] = None) -> tuple[str, str, str]:
     """(subject, html, text) for one sweep's worth of reminders.
 
@@ -130,6 +189,7 @@ def build_digest(items: Iterable[dict], today: Optional[date] = None) -> tuple[s
         headline = f"{len(upcoming)} document{'' if len(upcoming) == 1 else 's'} coming up"
 
     rows = "".join(_row(i) for i in items)
+    cadence = _cadence_sentence()
 
     html = f"""<!doctype html>
 <html><head><meta charset="utf-8">
@@ -163,9 +223,9 @@ def build_digest(items: Iterable[dict], today: Optional[date] = None) -> tuple[s
 
         <tr><td colspan="2" style="padding:18px 20px 24px;border-top:1px solid {_BORDER};background:#fcfcfd">
           <div style="font:400 12px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:{_FAINT}">
-            Sent by PitStop's daily sweep. Reminders escalate at 7, 3 and 1 days
-            before expiry, on the day, and again at 1, 3, 7, 15 and 30 days after
-            &mdash; until the document is renewed or snoozed.
+            Sent by PitStop's daily sweep. {cadence} The full escalation
+            &mdash; 7, 3 and 1 days before, on the day, then 1, 3, 7, 15 and 30
+            days after &mdash; goes to Discord.
           </div>
         </td></tr>
 
@@ -181,7 +241,7 @@ def build_digest(items: Iterable[dict], today: Optional[date] = None) -> tuple[s
             f"- {i['nickname']} [{i['registration_number']}]{owner}\n"
             f"  {i['label']} {_phrase(i['days'])} - expires {i['expiry']:%d %b %Y}"
         )
-    lines += ["", "Sent by PitStop's daily sweep."]
+    lines += ["", f"Sent by PitStop's daily sweep. {cadence}"]
 
     return _subject(items, today), html, "\n".join(lines)
 
@@ -192,9 +252,9 @@ def send_digest(items: Iterable[dict], today: Optional[date] = None) -> bool:
     Never raises: a failed digest must not fail the sweep, because the
     reminders themselves have already gone out and been logged.
     """
-    items = list(items)
+    items = select_for_email(items)
     if not items:
-        logger.info("No reminders fired; no digest to send.")
+        logger.info("Nothing at an emailed offset today; no digest to send.")
         return False
     if not _enabled():
         logger.info("Email digest disabled (no RESEND_API_KEY).")

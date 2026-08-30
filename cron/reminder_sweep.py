@@ -55,7 +55,8 @@ def sweep() -> int:
     )
     sent = 0
     # Collected for the email digest: the chat message goes out per document,
-    # but five due documents should be one email, not five.
+    # but five due documents should be one email, not five. send_digest then
+    # narrows to the offsets worth mailing about (see EMAIL_OFFSETS).
     fired: list[dict] = []
 
     for v in vehicles:
@@ -83,6 +84,7 @@ def sweep() -> int:
                     "label": label,
                     "expiry": expiry,
                     "days": remaining,
+                    "offset": offset,
                 })
                 logger.info("Sent: %s %s offset=%d", v["registration_number"], field, offset)
 
