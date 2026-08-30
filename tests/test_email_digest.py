@@ -104,7 +104,7 @@ def test_digest_has_a_preheader():
 def configured(monkeypatch):
     monkeypatch.setenv("RESEND_API_KEY", "re_test")
     monkeypatch.setenv("EMAIL_FROM", "PitStop <aiassistant@thomasjvarghese.com>")
-    monkeypatch.setenv("EMAIL_TO", "thomasjvarghese49@gmail.com")
+    monkeypatch.setenv("EMAIL_TO", "owner@example.com")
     monkeypatch.delenv("ENABLE_EMAIL", raising=False)
 
 
@@ -115,7 +115,7 @@ def test_send_posts_one_digest_for_many_reminders(configured):
     post.assert_called_once()                      # one email, not three
     body = post.call_args.kwargs["json"]
     assert body["from"] == "PitStop <aiassistant@thomasjvarghese.com>"
-    assert body["to"] == ["thomasjvarghese49@gmail.com"]
+    assert body["to"] == ["owner@example.com"]
     assert body["html"] and body["text"]
     headers = post.call_args.kwargs["headers"]
     assert headers["Authorization"] == "Bearer re_test"
@@ -270,21 +270,21 @@ def test_the_managed_list_is_the_source_of_truth(configured, monkeypatch):
 
 
 def test_env_is_the_fallback_before_anyone_is_added(configured, monkeypatch):
-    monkeypatch.setenv("EMAIL_TO", "thomasjvarghese49@gmail.com")
+    monkeypatch.setenv("EMAIL_TO", "owner@example.com")
     with patch("db.client.list_notification_recipients", return_value=[]), \
          patch("utils.email_digest.requests.post") as post:
         ed.send_digest([item()], TODAY)
-    assert post.call_args.kwargs["json"]["to"] == ["thomasjvarghese49@gmail.com"]
+    assert post.call_args.kwargs["json"]["to"] == ["owner@example.com"]
 
 
 def test_an_unreadable_list_falls_back_rather_than_dropping_the_digest(configured, monkeypatch):
     # The sweep has already reached the database by this point, but one
     # failing read must not silence the reminders.
-    monkeypatch.setenv("EMAIL_TO", "thomasjvarghese49@gmail.com")
+    monkeypatch.setenv("EMAIL_TO", "owner@example.com")
     with patch("db.client.list_notification_recipients", side_effect=OSError("db down")), \
          patch("utils.email_digest.requests.post") as post:
         assert ed.send_digest([item()], TODAY) is True
-    assert post.call_args.kwargs["json"]["to"] == ["thomasjvarghese49@gmail.com"]
+    assert post.call_args.kwargs["json"]["to"] == ["owner@example.com"]
 
 
 def test_no_recipients_anywhere_sends_nothing(configured, monkeypatch):

@@ -638,7 +638,7 @@ def test_deleting_from_the_fleet_list_hits_the_same_endpoint(signed_in):
 
 
 RECIPIENTS = [
-    {"id": 1, "email": "thomasjvarghese49@gmail.com", "name": "Thomas", "active": True,
+    {"id": 1, "email": "owner@example.com", "name": "Thomas", "active": True,
      "created_at": datetime(2026, 8, 30, 9, 0), "created_by": "web:thomas"},
     {"id": 2, "email": "priya@example.com", "name": "Priya", "active": False,
      "created_at": datetime(2026, 8, 29, 9, 0), "created_by": "web:thomas"},
@@ -665,7 +665,7 @@ def test_admin_page_offers_a_field_to_add_a_recipient(admin_page):
 
 def test_admin_page_lists_recipients_and_their_state(admin_page):
     body = admin_page.get("/admin/users").text
-    assert "thomasjvarghese49@gmail.com" in body and "priya@example.com" in body
+    assert "owner@example.com" in body and "priya@example.com" in body
     assert "Receiving" in body and "Paused" in body
 
 
