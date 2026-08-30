@@ -172,9 +172,12 @@ in.** Anyone with a Google account can complete the flow; they land in a
 waiting room and see nothing about the fleet until an administrator approves
 them at `/admin/users`.
 
-Create an OAuth client at *console.cloud.google.com → APIs & Services →
-Credentials → OAuth client ID → Web application*, with authorised redirect URI
-`https://<your-host>/auth/callback`, then:
+**Full walkthrough: [docs/google-oauth.md](docs/google-oauth.md)** — including
+the consent-screen decisions and the `redirect_uri_mismatch` gotcha.
+
+In short: create an OAuth client at *console.cloud.google.com → APIs & Services
+→ Credentials → OAuth client ID → Web application*, with authorised redirect
+URI `https://<your-host>/auth/callback`, then:
 
 ```bash
 AUTH_MODE=google
@@ -182,6 +185,7 @@ SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(32))")
 OIDC_CLIENT_ID=...
 OIDC_CLIENT_SECRET=...
 ADMIN_EMAIL=you@gmail.com     # approved as admin on first sign-in
+OIDC_REDIRECT_URI=https://<your-host>/auth/callback   # set behind a TLS proxy
 ```
 
 `ADMIN_EMAIL` is the bootstrap: that address is approved as an admin the first

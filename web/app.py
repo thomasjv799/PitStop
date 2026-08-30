@@ -139,7 +139,10 @@ def login(request: Request, error: Optional[str] = None):
 async def start_login(request: Request):
     if not settings.is_oidc:
         return auth.sign_in_dev(request)
-    return await auth.begin_oidc(request, str(request.url_for("callback")))
+    # OIDC_REDIRECT_URI wins when set: behind a proxy that terminates TLS,
+    # request.url_for builds an http:// URL the provider will reject.
+    redirect_uri = settings.oidc_redirect_uri or str(request.url_for("callback"))
+    return await auth.begin_oidc(request, redirect_uri)
 
 
 @app.get("/auth/callback", name="callback")

@@ -7,6 +7,7 @@ import pytest
 
 # The environment these need is set in tests/conftest.py, which pytest
 # imports before any test module.
+from fastapi.responses import RedirectResponse  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from web.app import app  # noqa: E402
@@ -768,3 +769,42 @@ def test_recipient_routes_reject_anonymous(client):
                  "/admin/recipients/1/delete"):
         r = client.post(path, data={"email": "a@b.com"}, follow_redirects=False)
         assert r.status_code == 303 and r.headers["location"] == "/login"
+
+
+def test_explicit_redirect_uri_overrides_the_derived_one(client, monkeypatch):
+    """Behind a TLS-terminating proxy, request.url_for yields http:// while
+    Google has https:// registered — the handshake then fails with
+    redirect_uri_mismatch. OIDC_REDIRECT_URI must win when set."""
+    import web.app as app_module
+
+    monkeypatch.setattr(app_module.settings, "auth_mode", "google")
+    monkeypatch.setattr(app_module.settings, "oidc_redirect_uri",
+                        "https://pitstop.example.com/auth/callback", raising=False)
+
+    seen = {}
+
+    async def fake_begin(request, redirect_uri):
+        seen["uri"] = redirect_uri
+        return RedirectResponse("https://accounts.google.com/o/oauth2/v2/auth",
+                                status_code=303)
+
+    monkeypatch.setattr(app_module.auth, "begin_oidc", fake_begin)
+    client.post("/login", follow_redirects=False)
+    assert seen["uri"] == "https://pitstop.example.com/auth/callback"
+
+
+def test_redirect_uri_falls_back_to_the_request(client, monkeypatch):
+    import web.app as app_module
+
+    monkeypatch.setattr(app_module.settings, "auth_mode", "google")
+    monkeypatch.setattr(app_module.settings, "oidc_redirect_uri", "", raising=False)
+
+    seen = {}
+
+    async def fake_begin(request, redirect_uri):
+        seen["uri"] = redirect_uri
+        return RedirectResponse("https://accounts.google.com", status_code=303)
+
+    monkeypatch.setattr(app_module.auth, "begin_oidc", fake_begin)
+    client.post("/login", follow_redirects=False)
+    assert seen["uri"].endswith("/auth/callback")

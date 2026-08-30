@@ -73,6 +73,13 @@ class Settings:
         self.oidc_scopes = os.getenv("OIDC_SCOPES", "openid email profile")
         self.oidc_provider_name = os.getenv("OIDC_PROVIDER_NAME", "Google")
 
+        # The callback URL registered with the provider. Normally derived
+        # from the request, but behind a TLS-terminating reverse proxy that
+        # yields http:// while the provider has https:// registered, and the
+        # handshake fails with redirect_uri_mismatch. Set this explicitly and
+        # the guesswork goes away.
+        self.oidc_redirect_uri = os.getenv("OIDC_REDIRECT_URI", "").strip()
+
         # The owner. On their first sign-in this address is approved as an
         # admin automatically — otherwise there would be nobody able to
         # approve the first account. Matched case-insensitively, and only
