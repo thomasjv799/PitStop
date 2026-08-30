@@ -36,3 +36,26 @@ jobs:
           CRON_NOTIFY_PLATFORM: discord
           CRON_NOTIFY_CHAT_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
         run: python -m cron.reminder_sweep
+
+      # The sweep going quiet is invisible by design — no reminders is
+      # indistinguishable from nothing being due. It had in fact been dead
+      # since the self-hosted runner's disk failed. Say so out loud.
+      - name: Report failure to Discord
+        if: failure()
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$DISCORD_BOT_TOKEN" ] || [ -z "$DISCORD_CHANNEL_ID" ]; then
+            echo "Discord secrets unset — cannot report the failure."
+            exit 0
+          fi
+          # Build the payload with json.dumps: printf turns \n into a real
+          # newline, which is an invalid control character inside a JSON string.
+          PAYLOAD=$(python3 -c 'import json, os; print(json.dumps({"content": "\u26a0\ufe0f PitStop reminder sweep FAILED \u2014 no reminders went out today.\n" + os.environ["RUN_URL"]}))')
+          curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bot $DISCORD_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$PAYLOAD" \
+            "https://discord.com/api/v10/channels/$DISCORD_CHANNEL_ID/messages"
