@@ -1,5 +1,7 @@
 __pycache__/
 .env
+.env.*
+!.env.example
 *.json
 *.ini
 .DS_Store
