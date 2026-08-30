@@ -684,3 +684,69 @@ def update_vehicle(vehicle_id: int, values: dict) -> Optional[dict]:
             cur.execute(sql, params)
             row = cur.fetchone()
             return dict(row) if row else None
+
+
+# ── reminder digest recipients (see 007_notification_recipients.sql) ─────
+
+
+_RECIPIENT_COLS = "id, email, name, active, created_at, created_by"
+
+
+def list_notification_recipients(active_only: bool = False) -> list[dict]:
+    where = "WHERE active" if active_only else ""
+    sql = (
+        f"SELECT {_RECIPIENT_COLS} FROM notification_recipients {where} "
+        f"ORDER BY active DESC, lower(email)"
+    )
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql)
+            return [dict(r) for r in cur.fetchall()]
+
+
+def add_notification_recipient(email: str, name: str, created_by: str) -> dict:
+    """Add a recipient, or reactivate one already on the list.
+
+    Re-adding an address that was switched off turns it back on rather than
+    failing on the unique index — that is what clicking "add" means. The
+    returned row carries `inserted`, so the caller can tell a new recipient
+    from a revived one: `xmax = 0` is Postgres' way of saying this row came
+    from the INSERT rather than the DO UPDATE.
+
+    The address is trimmed as well as lowercased, matching the unique index.
+    lower() alone does not trim, so a pasted "  a@b.com " would key
+    differently from "a@b.com" and land as a second row for one mailbox.
+    """
+    sql = f"""
+        INSERT INTO notification_recipients (email, name, created_by)
+        VALUES (lower(btrim(%(email)s)), %(name)s, %(by)s)
+        ON CONFLICT (lower(btrim(email))) DO UPDATE
+            SET active = true,
+                name = COALESCE(NULLIF(EXCLUDED.name, ''), notification_recipients.name)
+        RETURNING {_RECIPIENT_COLS}, (xmax = 0) AS inserted
+    """
+    with _conn() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, {"email": email, "name": name or None, "by": created_by})
+            row = cur.fetchone()
+            return dict(row) if row else None
+
+
+def set_notification_recipient_active(recipient_id: int, active: bool) -> bool:
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE notification_recipients SET active = %(a)s WHERE id = %(id)s",
+                {"a": active, "id": recipient_id},
+            )
+            return cur.rowcount > 0
+
+
+def delete_notification_recipient(recipient_id: int) -> bool:
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM notification_recipients WHERE id = %(id)s",
+                {"id": recipient_id},
+            )
+            return cur.rowcount > 0

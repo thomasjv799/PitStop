@@ -45,7 +45,7 @@ NAV = (
 )
 
 # Shown only to admins, appended to NAV.
-ADMIN_NAV = (("users", "/admin/users", "Users"),)
+ADMIN_NAV = (("users", "/admin/users", "People"),)
 
 # A document this many days out or nearer counts as "due soon".
 SOON_DAYS = int(os.getenv("WEB_SOON_DAYS", "30"))

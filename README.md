@@ -139,6 +139,7 @@ Apply the migrations once before first run:
 psql "$DATABASE_URI" -f db/migrations/004_vehicle_archive_and_delete.sql
 psql "$DATABASE_URI" -f db/migrations/005_web_users.sql
 psql "$DATABASE_URI" -f db/migrations/006_enable_rls.sql
+psql "$DATABASE_URI" -f db/migrations/007_notification_recipients.sql
 ```
 
 `006` turns on row-level security with no policies. Supabase exposes every
@@ -207,7 +208,7 @@ the instance with nobody able to undo it.
 | `/vehicles/new` | Add a vehicle |
 | `/vehicles/<reg>/edit` | Edit every detail and expiry date |
 | `/costs` | Stub — premium and tax tracking, not built yet |
-| `/admin/users` | Approve and manage sign-ins (admins only) |
+| `/admin/users` | Approve sign-ins, and manage who gets reminder emails (admins only) |
 
 **How urgency reads.** A document more than `WEB_SOON_DAYS` (default 30) away
 shows its date plainly; anything nearer or already past gets a day-count chip —

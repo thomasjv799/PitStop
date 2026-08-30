@@ -246,6 +246,32 @@ def build_digest(items: Iterable[dict], today: Optional[date] = None) -> tuple[s
     return _subject(items, today), html, "\n".join(lines)
 
 
+def env_recipients() -> list[str]:
+    return [a.strip() for a in os.getenv("EMAIL_TO", "").split(",") if a.strip()]
+
+
+def resolve_recipients() -> list[str]:
+    """Who gets the digest.
+
+    The managed list in `notification_recipients` is the source of truth, so
+    adding someone is a form field rather than a redeploy. EMAIL_TO remains
+    the fallback: it covers the moment before anyone has been added, and the
+    case where the database cannot be reached — the sweep has already talked
+    to the database by this point, but the digest should still go out if that
+    one read fails.
+    """
+    try:
+        from db import client as db
+
+        rows = db.list_notification_recipients(active_only=True)
+        if rows:
+            return [r["email"] for r in rows]
+        logger.info("No active recipients configured; falling back to EMAIL_TO.")
+    except Exception:
+        logger.warning("Could not read the recipient list; using EMAIL_TO", exc_info=True)
+    return env_recipients()
+
+
 def send_digest(items: Iterable[dict], today: Optional[date] = None) -> bool:
     """Post the digest to Resend. Returns whether anything was sent.
 
@@ -262,9 +288,9 @@ def send_digest(items: Iterable[dict], today: Optional[date] = None) -> bool:
 
     api_key = os.environ["RESEND_API_KEY"]
     sender = os.getenv("EMAIL_FROM", "PitStop <aiassistant@thomasjvarghese.com>")
-    recipients = [a.strip() for a in os.getenv("EMAIL_TO", "").split(",") if a.strip()]
+    recipients = resolve_recipients()
     if not recipients:
-        logger.warning("EMAIL_TO is unset; skipping the digest.")
+        logger.warning("No active recipients and EMAIL_TO is unset; skipping the digest.")
         return False
 
     subject, html, text = build_digest(items, today)

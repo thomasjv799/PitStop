@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from db import client as db
+from utils import email_digest
 from web import auth, service
 from web.config import (
     ADMIN_NAV, DOCUMENT_FIELDS, DOCUMENTS, LONG_LABELS, NAV, SNOOZE_OPTIONS,
@@ -378,12 +379,23 @@ def admin_users(
     error: Optional[str] = None,
     user: dict = Depends(auth.require_admin),
 ):
+    recipients, recipient_error = [], None
+    try:
+        recipients = service.build_recipients(db.list_notification_recipients())
+    except Exception:
+        logger.warning("Could not read the recipient list", exc_info=True)
+        recipient_error = "Could not read the recipient list."
+
     if user.get("mode") == "dev":
         return _page(request, "users.html", "users", user=user, users=[], dev=True,
+                     recipients=recipients, recipient_error=recipient_error,
+                     fallback_to=email_digest.env_recipients(),
                      notice=notice, error=error)
     return _page(
         request, "users.html", "users", user=user,
         users=service.build_users(db.list_web_users()), dev=False,
+        recipients=recipients, recipient_error=recipient_error,
+        fallback_to=email_digest.env_recipients(),
         notice=notice, error=error,
     )
 
@@ -433,6 +445,62 @@ def delete_user(subject: str, user: dict = Depends(auth.require_admin)):
         return _back("/admin/users", error="No such account.")
     logger.warning("%s removed account %s", auth.actor(user), subject)
     return _back("/admin/users", notice="Account removed.")
+
+
+# ── admin: who receives the reminder digest ──────────────────────────────
+
+
+@app.post("/admin/recipients")
+def add_recipient(
+    email: str = Form(""),
+    name: str = Form(""),
+    user: dict = Depends(auth.require_admin),
+):
+    """Add a mailbox to the reminder digest."""
+    checked = service.validate_recipient({"email": email, "name": name})
+    if not checked["ok"]:
+        return _back("/admin/users", error=next(iter(checked["errors"].values())))
+
+    values = checked["values"]
+    try:
+        row = db.add_notification_recipient(
+            values["email"], values["name"] or "", auth.actor(user)
+        )
+    except Exception:
+        logger.exception("Could not add recipient %s", values["email"])
+        return _back("/admin/users", error="Could not add that address.")
+
+    if row is None:
+        return _back("/admin/users", error="Could not add that address.")
+    if row.get("inserted") is False:
+        # Already present — the insert reactivated it rather than failing.
+        return _back("/admin/users",
+                     notice=f"{values['email']} was already on the list; emails are on.")
+    logger.info("%s added digest recipient %s", auth.actor(user), values["email"])
+    return _back("/admin/users", notice=f"{values['email']} will receive the reminder digest.")
+
+
+@app.post("/admin/recipients/{recipient_id}/active")
+def set_recipient_active(
+    recipient_id: int,
+    active: str = Form("1"),
+    user: dict = Depends(auth.require_admin),
+):
+    want = active not in ("0", "false", "")
+    if not db.set_notification_recipient_active(recipient_id, want):
+        return _back("/admin/users", error="No such recipient.")
+    logger.info("%s %s recipient %s", auth.actor(user),
+                "resumed" if want else "paused", recipient_id)
+    return _back("/admin/users",
+                 notice="Emails resumed." if want else "Emails paused for that address.")
+
+
+@app.post("/admin/recipients/{recipient_id}/delete")
+def remove_recipient(recipient_id: int, user: dict = Depends(auth.require_admin)):
+    if not db.delete_notification_recipient(recipient_id):
+        return _back("/admin/users", error="No such recipient.")
+    logger.info("%s removed digest recipient %s", auth.actor(user), recipient_id)
+    return _back("/admin/users", notice="Removed from the reminder digest.")
 
 
 @app.get("/healthz")

@@ -4,6 +4,7 @@ Pure functions over plain dicts — no database, no request. The routes fetch
 rows and hand them here; the templates only render what comes back.
 """
 
+import re
 from datetime import date
 from typing import Any, Iterable, Optional
 
@@ -528,3 +529,54 @@ def blank_form() -> dict[str, str]:
         + tuple(f for f, _, _ in DOCUMENTS)
     )
     return {k: "" for k in keys}
+
+
+# ── digest recipients ────────────────────────────────────────────────────
+
+
+# Deliberately permissive: the job is to catch a typo, not to adjudicate
+# RFC 5322. Anything that survives this still has to be deliverable.
+_EMAIL_RE = re.compile(r"^[^@\s,;]+@[^@\s,;.]+(\.[^@\s,;.]+)+$")
+
+EMAIL_MAX = 254
+
+
+def normalise_email(raw: str) -> str:
+    """Lowercased and trimmed — one mailbox, one row, one copy of the digest."""
+    return (raw or "").strip().lower()
+
+
+def validate_recipient(form: dict) -> dict:
+    """Check an add-recipient submission. Pure: uniqueness is the database's
+    job, and the route adds that error itself."""
+    errors: dict[str, str] = {}
+    email = normalise_email(form.get("email", ""))
+    name = (form.get("name") or "").strip()
+
+    if not email:
+        errors["email"] = "An email address is required."
+    elif len(email) > EMAIL_MAX:
+        errors["email"] = "That address is too long."
+    elif not _EMAIL_RE.match(email):
+        errors["email"] = f"{email!r} does not look like an email address."
+
+    if len(name) > 120:
+        errors["name"] = "That name is too long (120 characters max)."
+
+    return {"values": {"email": email, "name": name or None},
+            "errors": errors, "ok": not errors}
+
+
+def build_recipients(rows: Iterable[dict]) -> list[dict[str, Any]]:
+    """notification_recipients rows, formatted for the admin table."""
+    out = []
+    for row in rows:
+        out.append({
+            "id": row["id"],
+            "email": row["email"],
+            "name": row["name"] or "",
+            "active": bool(row["active"]),
+            "added_text": format_long_date(row["created_at"].date()),
+            "added_by": row["created_by"] or "",
+        })
+    return out

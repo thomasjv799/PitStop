@@ -632,3 +632,139 @@ def test_deleting_from_the_fleet_list_hits_the_same_endpoint(signed_in):
                            data={"confirm": "KL04AS1371"}, follow_redirects=False)
     delete.assert_called_once_with("KL04AS1371")
     assert r.headers["location"].startswith("/fleet?notice=")
+
+
+# ── digest recipients ────────────────────────────────────────────────────
+
+
+RECIPIENTS = [
+    {"id": 1, "email": "thomasjvarghese49@gmail.com", "name": "Thomas", "active": True,
+     "created_at": datetime(2026, 8, 30, 9, 0), "created_by": "web:thomas"},
+    {"id": 2, "email": "priya@example.com", "name": "Priya", "active": False,
+     "created_at": datetime(2026, 8, 29, 9, 0), "created_by": "web:thomas"},
+]
+
+
+@pytest.fixture
+def admin_page(as_admin):
+    """The admin page with both lists readable."""
+    with patch("web.app.db.list_web_users", return_value=[]), \
+         patch("web.app.db.count_pending_web_users", return_value=0), \
+         patch("web.app.db.list_notification_recipients", return_value=RECIPIENTS):
+        yield as_admin
+
+
+def test_admin_page_offers_a_field_to_add_a_recipient(admin_page):
+    body = admin_page.get("/admin/users").text
+    assert 'action="/admin/recipients"' in body
+    assert 'name="email"' in body
+    assert "Reminder emails" in body
+    # Recipients need no PitStop account — that is the point of a separate list.
+    assert "do not need a PitStop account" in body
+
+
+def test_admin_page_lists_recipients_and_their_state(admin_page):
+    body = admin_page.get("/admin/users").text
+    assert "thomasjvarghese49@gmail.com" in body and "priya@example.com" in body
+    assert "Receiving" in body and "Paused" in body
+
+
+def test_admin_page_survives_an_unreadable_recipient_list(as_admin):
+    with patch("web.app.db.list_web_users", return_value=[]), \
+         patch("web.app.db.count_pending_web_users", return_value=0), \
+         patch("web.app.db.list_notification_recipients", side_effect=OSError("db down")):
+        r = as_admin.get("/admin/users")
+    assert r.status_code == 200
+    assert "Could not read the recipient list" in r.text
+
+
+def test_empty_list_says_what_the_digest_falls_back_to(as_admin, monkeypatch):
+    monkeypatch.setenv("EMAIL_TO", "fallback@example.com")
+    with patch("web.app.db.list_web_users", return_value=[]), \
+         patch("web.app.db.count_pending_web_users", return_value=0), \
+         patch("web.app.db.list_notification_recipients", return_value=[]):
+        body = as_admin.get("/admin/users").text
+    assert "Nobody is on the list yet" in body
+    assert "fallback@example.com" in body
+
+
+def test_adding_a_recipient_normalises_the_address(as_admin):
+    with patch("web.app.db.add_notification_recipient",
+               return_value={"id": 3, "inserted": True}) as add:
+        r = as_admin.post("/admin/recipients",
+                          data={"email": "  Priya@Example.COM ", "name": " Priya "},
+                          follow_redirects=False)
+    add.assert_called_once_with("priya@example.com", "Priya", "web:g-admin")
+    assert "notice=" in r.headers["location"]
+
+
+def test_adding_a_malformed_address_is_refused(as_admin):
+    with patch("web.app.db.add_notification_recipient") as add:
+        r = as_admin.post("/admin/recipients", data={"email": "notanemail"},
+                          follow_redirects=False)
+    add.assert_not_called()
+    assert "error=" in r.headers["location"]
+
+
+def test_re_adding_an_existing_address_says_so_and_does_not_duplicate(as_admin):
+    # ON CONFLICT DO UPDATE returns the existing row with inserted=False
+    # rather than failing, so the address is reactivated, not duplicated.
+    with patch("web.app.db.add_notification_recipient",
+               return_value={"id": 1, "inserted": False}):
+        r = as_admin.post("/admin/recipients", data={"email": "a@b.com"},
+                          follow_redirects=False)
+    assert "already+on+the+list" in r.headers["location"]
+    assert "error=" not in r.headers["location"]      # not a failure
+
+
+def test_a_genuinely_new_address_reads_as_added(as_admin):
+    with patch("web.app.db.add_notification_recipient",
+               return_value={"id": 9, "inserted": True}):
+        r = as_admin.post("/admin/recipients", data={"email": "new@b.com"},
+                          follow_redirects=False)
+    assert "will+receive" in r.headers["location"]
+
+
+def test_a_failing_insert_does_not_500(as_admin):
+    with patch("web.app.db.add_notification_recipient", side_effect=OSError("db down")):
+        r = as_admin.post("/admin/recipients", data={"email": "a@b.com"},
+                          follow_redirects=False)
+    assert r.status_code == 303 and "error=" in r.headers["location"]
+
+
+def test_pausing_and_resuming_a_recipient(as_admin):
+    with patch("web.app.db.set_notification_recipient_active", return_value=True) as flag:
+        as_admin.post("/admin/recipients/1/active", data={"active": "0"},
+                      follow_redirects=False)
+        assert flag.call_args.args == (1, False)
+        as_admin.post("/admin/recipients/1/active", data={"active": "1"},
+                      follow_redirects=False)
+        assert flag.call_args.args == (1, True)
+
+
+def test_removing_a_recipient(as_admin):
+    with patch("web.app.db.delete_notification_recipient", return_value=True) as rm:
+        r = as_admin.post("/admin/recipients/2/delete", follow_redirects=False)
+    rm.assert_called_once_with(2)
+    assert "notice=" in r.headers["location"]
+
+
+def test_recipient_routes_are_admin_only(client):
+    # An approved member must not be able to redirect the reminder mail.
+    row = {"subject": "g-2", "email": "m@example.com", "name": "Member",
+           "role": "member", "approved_at": datetime.now()}
+    with patch("web.auth.current_user", return_value={
+            "sub": "g-2", "name": "M", "email": "", "mode": "google"}), \
+         patch("web.auth.db.get_web_user", return_value=row), \
+         patch("web.app.db.add_notification_recipient") as add:
+        r = client.post("/admin/recipients", data={"email": "attacker@evil.com"},
+                        follow_redirects=False)
+    add.assert_not_called()
+    assert r.status_code == 303 and r.headers["location"] == "/"
+
+
+def test_recipient_routes_reject_anonymous(client):
+    for path in ("/admin/recipients", "/admin/recipients/1/active",
+                 "/admin/recipients/1/delete"):
+        r = client.post(path, data={"email": "a@b.com"}, follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == "/login"

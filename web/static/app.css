@@ -319,3 +319,8 @@ td > .doc:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px
 tr:hover .iconbtn, .iconbtn:focus-visible { opacity: 1; }
 .iconbtn:hover { background: var(--surface-hover); color: var(--text); }
 .iconbtn.danger:hover { background: var(--over-soft); color: var(--over-text); }
+
+/* ── add-recipient row ────────────────────────────────────────────────── */
+
+.addrow { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin: 0; }
+.addrow .btn { flex: none; }

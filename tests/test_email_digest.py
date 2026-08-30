@@ -254,3 +254,42 @@ def test_footer_follows_a_custom_cadence(monkeypatch):
 def test_footer_still_points_at_discord_for_the_full_escalation():
     _, html, _ = ed.build_digest([item()], TODAY)
     assert "goes to Discord" in html
+
+
+# ── who receives it ──────────────────────────────────────────────────────
+
+
+def test_the_managed_list_is_the_source_of_truth(configured, monkeypatch):
+    monkeypatch.setenv("EMAIL_TO", "stale@example.com")
+    rows = [{"email": "a@example.com"}, {"email": "b@example.com"}]
+    with patch("db.client.list_notification_recipients", return_value=rows), \
+         patch("utils.email_digest.requests.post") as post:
+        ed.send_digest([item()], TODAY)
+    # EMAIL_TO must not leak in once the list is managed in the database.
+    assert post.call_args.kwargs["json"]["to"] == ["a@example.com", "b@example.com"]
+
+
+def test_env_is_the_fallback_before_anyone_is_added(configured, monkeypatch):
+    monkeypatch.setenv("EMAIL_TO", "thomasjvarghese49@gmail.com")
+    with patch("db.client.list_notification_recipients", return_value=[]), \
+         patch("utils.email_digest.requests.post") as post:
+        ed.send_digest([item()], TODAY)
+    assert post.call_args.kwargs["json"]["to"] == ["thomasjvarghese49@gmail.com"]
+
+
+def test_an_unreadable_list_falls_back_rather_than_dropping_the_digest(configured, monkeypatch):
+    # The sweep has already reached the database by this point, but one
+    # failing read must not silence the reminders.
+    monkeypatch.setenv("EMAIL_TO", "thomasjvarghese49@gmail.com")
+    with patch("db.client.list_notification_recipients", side_effect=OSError("db down")), \
+         patch("utils.email_digest.requests.post") as post:
+        assert ed.send_digest([item()], TODAY) is True
+    assert post.call_args.kwargs["json"]["to"] == ["thomasjvarghese49@gmail.com"]
+
+
+def test_no_recipients_anywhere_sends_nothing(configured, monkeypatch):
+    monkeypatch.setenv("EMAIL_TO", "")
+    with patch("db.client.list_notification_recipients", return_value=[]), \
+         patch("utils.email_digest.requests.post") as post:
+        assert ed.send_digest([item()], TODAY) is False
+    post.assert_not_called()

@@ -493,3 +493,71 @@ def test_archived_detection_is_case_insensitive():
                             ("archived", True), ("Archived", True)):
         row["status"] = value
         assert service.build_row(row, TODAY, {}, {})["archived"] is expected
+
+
+# ── digest recipients ────────────────────────────────────────────────────
+
+
+def test_email_is_normalised_to_one_mailbox_one_row():
+    # The same mailbox added twice, once capitalised, must not receive two
+    # copies of the digest.
+    assert service.normalise_email("  Thomas@Example.COM ") == "thomas@example.com"
+    assert service.normalise_email("") == ""
+    assert service.normalise_email(None) == ""
+
+
+@pytest.mark.parametrize("email", [
+    "a@b.com", "thomas.j+pitstop@gmail.com", "x@sub.domain.co.in",
+])
+def test_validate_accepts_real_addresses(email):
+    assert service.validate_recipient({"email": email})["ok"] is True
+
+
+@pytest.mark.parametrize("email", [
+    "", "   ", "notanemail", "no@tld", "@nothing.com", "two@@at.com",
+    "spaces in@x.com", "trailing@x.com,other@y.com",
+])
+def test_validate_rejects_malformed_addresses(email):
+    result = service.validate_recipient({"email": email})
+    assert result["ok"] is False and "email" in result["errors"]
+
+
+def test_validate_rejects_an_over_long_address():
+    long = "a" * 250 + "@x.com"
+    assert "email" in service.validate_recipient({"email": long})["errors"]
+
+
+def test_validate_returns_a_normalised_value():
+    result = service.validate_recipient({"email": " Foo@Bar.com ", "name": " Priya "})
+    assert result["values"] == {"email": "foo@bar.com", "name": "Priya"}
+
+
+def test_validate_treats_a_blank_name_as_absent():
+    assert service.validate_recipient({"email": "a@b.com", "name": "  "})["values"]["name"] is None
+
+
+def test_validate_rejects_an_over_long_name():
+    result = service.validate_recipient({"email": "a@b.com", "name": "x" * 200})
+    assert "name" in result["errors"]
+
+
+def test_build_recipients_formats_the_admin_table():
+    rows = [{
+        "id": 1, "email": "a@b.com", "name": None, "active": True,
+        "created_at": datetime(2026, 8, 30, 9, 0), "created_by": "web:thomas",
+    }]
+    built = service.build_recipients(rows)[0]
+    assert built["email"] == "a@b.com"
+    assert built["name"] == ""
+    assert built["active"] is True
+    assert built["added_text"] == "30 Aug 2026"
+    assert built["added_by"] == "web:thomas"
+
+
+def test_email_normalisation_trims_as_well_as_lowercases():
+    # lower() alone does not trim. A pasted address with stray spaces would
+    # key differently in the unique index and become a second row for one
+    # mailbox — two copies of every digest.
+    assert service.normalise_email("  Ravi@Example.COM  ") == "ravi@example.com"
+    assert service.validate_recipient(
+        {"email": "  Ravi@Example.COM  "})["values"]["email"] == "ravi@example.com"
