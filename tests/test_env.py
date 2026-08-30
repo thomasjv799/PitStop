@@ -112,3 +112,24 @@ def test_blank_enable_email_does_not_silently_disable_email(monkeypatch):
 
     monkeypatch.setenv("ENABLE_EMAIL", "0")
     assert ed._enabled() is False
+
+
+def test_blank_database_uri_is_refused_not_sent_to_psycopg2(monkeypatch):
+    """An empty DSN makes psycopg2 fall back to a local Unix socket and fail
+    with 'No such file or directory', which reads like a broken server rather
+    than an unset variable. This is what the Vercel deploy actually hit."""
+    import db.client as client
+
+    monkeypatch.setenv("DATABASE_URI", "")
+    monkeypatch.setattr(client, "_POOL", None)
+    with pytest.raises(client.DatabaseUnavailable, match="DATABASE_URI is not set"):
+        client._get_pool()
+
+
+def test_missing_database_uri_is_refused_too(monkeypatch):
+    import db.client as client
+
+    monkeypatch.delenv("DATABASE_URI", raising=False)
+    monkeypatch.setattr(client, "_POOL", None)
+    with pytest.raises(client.DatabaseUnavailable, match="pooler"):
+        client._get_pool()

@@ -848,3 +848,23 @@ def test_dev_mode_says_so_on_every_page(signed_in):
         assert "Dev mode" in body
         assert "signed in as an" in body
         assert "AUTH_MODE=google" in body
+
+
+def test_a_database_failure_explains_itself_instead_of_500ing(signed_in):
+    """Every page reads the fleet, so an unset or unreachable database is the
+    likeliest runtime failure — and a bare 500 sends you to the logs for
+    something the page could say."""
+    with patch("web.app.db.get_all_vehicles_with_expiry",
+               side_effect=__import__("db.client", fromlist=["x"]).DatabaseUnavailable(
+                   "DATABASE_URI is not set, so there is no database to talk to.")):
+        r = signed_in.get("/", follow_redirects=False)
+    assert r.status_code == 503
+    assert "Can&#x27;t reach the database" in r.text or "reach the database" in r.text
+    assert "DATABASE_URI" in r.text
+
+
+def test_a_real_bug_is_not_disguised_as_a_database_problem(signed_in):
+    with patch("web.app.db.get_all_vehicles_with_expiry",
+               side_effect=ValueError("a genuine bug")):
+        with pytest.raises(ValueError, match="a genuine bug"):
+            signed_in.get("/")

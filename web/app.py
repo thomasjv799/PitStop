@@ -16,6 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+import psycopg2
+
 from db import client as db
 from utils import email_digest, redact
 from web import auth, service
@@ -70,7 +72,31 @@ async def _refuse_when_misconfigured(request: Request, call_next):
             "environment changes only apply to the <em>next</em> build.</p>",
             status_code=503,
         )
-    return await call_next(request)
+    try:
+        return await call_next(request)
+    except (db.DatabaseUnavailable, psycopg2.OperationalError) as exc:
+        # Every page reads the fleet, so an unset or unreachable database is
+        # the likeliest runtime failure. A bare 500 sends you to the logs for
+        # something the page can say itself. Narrow on purpose: a genuine bug
+        # must still surface as a real error.
+        logger.exception("database unavailable serving %s", request.url.path)
+        return HTMLResponse(
+            "<!doctype html><meta charset=utf-8>"
+            "<title>PitStop — database unavailable</title>"
+            "<style>body{font:15px/1.6 system-ui,sans-serif;max-width:44rem;"
+            "margin:12vh auto;padding:0 1.5rem;color:#101828}"
+            "h1{font-size:20px;margin:0 0 .4rem}p{color:#667085}"
+            "pre{background:#f4f5f8;padding:.8rem 1rem;border-radius:8px;"
+            "font-size:12.5px;white-space:pre-wrap;color:#b42318}</style>"
+            "<h1>Cannot reach the database</h1>"
+            "<p>The app is running, but the query failed:</p>"
+            f"<pre>{str(exc).strip() or exc.__class__.__name__}</pre>"
+            "<p>Check <code>DATABASE_URI</code>. A variable that exists but is "
+            "<em>blank</em> counts as unset. On a host without IPv6 — GitHub "
+            "Actions, Vercel — it must be a Supabase <em>pooler</em> URI; the "
+            "direct <code>db.&lt;ref&gt;.supabase.co</code> host is IPv6-only.</p>",
+            status_code=503,
+        )
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.globals.update(

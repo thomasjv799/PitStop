@@ -58,6 +58,11 @@ _ORDER_BY_NEAREST = """ORDER BY LEAST(
 # this module never needs DATABASE_URI, and it is thread-safe because
 # main.py runs the bots in threads and uvicorn runs sync routes in a
 # threadpool.
+class DatabaseUnavailable(RuntimeError):
+    """The database cannot be reached, and it is a configuration problem
+    rather than a bug — an unset DSN, or a host nothing can route to."""
+
+
 _POOL = None
 _POOL_LOCK = threading.Lock()
 
@@ -87,7 +92,14 @@ def _get_pool():
     if _POOL is None:
         with _POOL_LOCK:
             if _POOL is None:
-                dsn = os.environ["DATABASE_URI"]
+                dsn = env_str("DATABASE_URI")
+                if not dsn:
+                    raise DatabaseUnavailable(
+                        "DATABASE_URI is not set, so there is no database to "
+                        "talk to. Set it to the Supabase pooler connection "
+                        "string (Project Settings -> Database -> Connection "
+                        "string -> Session pooler; port 6543 on serverless)."
+                    )
                 warning = dsn_warning(dsn)
                 if warning:
                     logger.warning(warning)
