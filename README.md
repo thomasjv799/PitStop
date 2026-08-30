@@ -138,7 +138,14 @@ Apply the migrations once before first run:
 ```bash
 psql "$DATABASE_URI" -f db/migrations/004_vehicle_archive_and_delete.sql
 psql "$DATABASE_URI" -f db/migrations/005_web_users.sql
+psql "$DATABASE_URI" -f db/migrations/006_enable_rls.sql
 ```
+
+`006` turns on row-level security with no policies. Supabase exposes every
+table in `public` to the `anon` and `authenticated` roles, and neither has
+`BYPASSRLS` — so no policies means no access through the publishable key.
+Nothing here uses that key: the bot, the sweep and the web app all connect as
+`postgres`, which does have `BYPASSRLS`, so they are unaffected.
 
 In production run uvicorn behind the reverse proxy that terminates TLS:
 

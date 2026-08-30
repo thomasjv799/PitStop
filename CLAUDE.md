@@ -56,6 +56,7 @@ Migrations are applied by hand, in order:
 ```bash
 psql "$DATABASE_URI" -f db/migrations/004_vehicle_archive_and_delete.sql
 psql "$DATABASE_URI" -f db/migrations/005_web_users.sql
+psql "$DATABASE_URI" -f db/migrations/006_enable_rls.sql
 ```
 
 **Do not point `DATABASE_URI` at Supabase while running `pytest`.** The tests
@@ -75,7 +76,7 @@ locally.
   - The project is **shared with DropHunter** — `games`, `watches`, `price_history`, `allowed_users` and friends live in the same schema. Migrations here affect that project's database too.
   - `vehicles.status` is `NOT NULL DEFAULT 'ACTIVE'` and every row holds `'ACTIVE'`. Archiving writes `'ARCHIVED'`; restoring writes `'ACTIVE'`, never NULL, which the constraint rejects. Comparisons are case-insensitive.
   - The live `vehicles` table carries eight VAHAN-sourced columns beyond the expiry dates: `manufacturer`, `model`, `emission_norms`, `rto`, `state`, `insurance_company`, `insurance_policy_no`, `permit_no`. `tests/test_schema_contract.py` pins the column list so it cannot drift silently.
-  - **RLS is disabled on every table**, so anyone holding the anon key can read or write them. The app connects with the Postgres URI and is unaffected, but the exposure is real.
+  - **Row-level security** is enabled on every table by `006_enable_rls.sql`, with no policies. Supabase exposes `public` through PostgREST to `anon` and `authenticated`; neither role has `BYPASSRLS`, so no policies means no access — which is right, because nothing here uses the anon key. `postgres` (what `DATABASE_URI` connects as) and `service_role` (DropHunter's backup) both carry `BYPASSRLS`, so applications are unaffected. Add policies only if a browser client is ever pointed at this database. Reverse one table with `ALTER TABLE public.<t> DISABLE ROW LEVEL SECURITY;`.
 - **Notifications (`utils/notify.py`):** `notify(msg, platform, chat_id)` dispatches to the correct sender. Cron uses `CRON_NOTIFY_PLATFORM` + `CRON_NOTIFY_CHAT_ID` to decide where alerts go (default: Telegram).
 - **Web (`web/`):** FastAPI + Jinja2, sharing `db/client.py` with the bots so there is no second path that writes a vehicle row. Pages: `/` dashboard (counts + a queue of documents needing action), `/fleet` (the five-column matrix), `/timeline` (a −60d…+90d rail), `/vehicles/{registration}` (every column plus each document's reminder ladder), `/costs` (a stub), `/admin/users`.
 - **Web view model (`web/service.py`):** pure functions over plain dicts — no database, no request. Status, chips, the action queue, timeline positions, the ladder and the detail page are all built here, which is where the expiry rules are tested. Routes fetch rows and hand them over; templates render only what comes back.
