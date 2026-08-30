@@ -19,6 +19,7 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 
 from db import client as db
+from utils import redact
 from web.config import settings
 
 logger = logging.getLogger(__name__)
@@ -175,7 +176,7 @@ async def complete_oidc(request: Request) -> dict[str, Any]:
     approved = row["approved_at"] is not None
     logger.info(
         "%s sign-in as %s (role=%s, approved=%s)",
-        settings.auth_mode, email, row["role"], approved,
+        settings.auth_mode, redact.email(email), row["role"], approved,
     )
     return {"approved": approved, "role": row["role"]}
 

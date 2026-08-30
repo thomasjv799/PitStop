@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from db import client as db
-from utils import email_digest
+from utils import email_digest, redact
 from web import auth, service
 from web.config import (
     ADMIN_NAV, DOCUMENT_FIELDS, DOCUMENTS, LONG_LABELS, NAV, SNOOZE_OPTIONS,
@@ -280,13 +280,13 @@ async def create_vehicle(request: Request, user: dict = Depends(auth.require_app
                 request, user, form=form,
                 errors={"registration_number": f"{registration} is already tracked."},
             )
-        logger.exception("could not create vehicle %s", registration)
+        logger.exception("could not create vehicle %s", redact.reg(registration))
         return _vehicle_form(
             request, user, form=form,
             errors={"registration_number": "Could not save that vehicle."},
         )
 
-    logger.info("%s added vehicle %s", auth.actor(user), registration)
+    logger.info("%s added vehicle %s", auth.actor(user), redact.reg(registration))
     return _back(f"/vehicles/{registration}", notice=f"{registration} added.")
 
 
@@ -331,7 +331,7 @@ async def save_vehicle(
             errors={"registration_number": "Could not save that vehicle."},
         )
 
-    logger.info("%s edited vehicle %s", auth.actor(user), registration)
+    logger.info("%s edited vehicle %s", auth.actor(user), redact.reg(registration))
     return _back(f"/vehicles/{new_registration}", notice="Changes saved.")
 
 
@@ -470,7 +470,7 @@ def add_recipient(
             values["email"], values["name"] or "", auth.actor(user)
         )
     except Exception:
-        logger.exception("Could not add recipient %s", values["email"])
+        logger.exception("Could not add recipient %s", redact.email(values["email"]))
         return _back("/admin/users", error="Could not add that address.")
 
     if row is None:
@@ -479,7 +479,8 @@ def add_recipient(
         # Already present — the insert reactivated it rather than failing.
         return _back("/admin/users",
                      notice=f"{values['email']} was already on the list; emails are on.")
-    logger.info("%s added digest recipient %s", auth.actor(user), values["email"])
+    logger.info("%s added digest recipient %s", auth.actor(user),
+                redact.email(values["email"]))
     return _back("/admin/users", notice=f"{values['email']} will receive the reminder digest.")
 
 
@@ -549,7 +550,8 @@ def renew(
     if not db.update_vehicle_field(registration, field, parsed.isoformat()):
         return _back(back, error=f"No vehicle {registration}.")
 
-    logger.info("%s renewed %s.%s to %s", auth.actor(user), registration, field, parsed)
+    logger.info("%s renewed %s.%s to %s", auth.actor(user), redact.reg(registration),
+                field, parsed)
     return _back(back, notice=(
         f"{LONG_LABELS[field]} for {registration} now expires "
         f"{service.format_long_date(parsed)}."
@@ -608,7 +610,8 @@ def archive(
     want = archived not in ("0", "false", "")
     if not db.set_vehicle_archived(registration, want):
         return _back("/fleet", error=f"No vehicle {registration}.")
-    logger.info("%s %s %s", auth.actor(user), "archived" if want else "restored", registration)
+    logger.info("%s %s %s", auth.actor(user), "archived" if want else "restored",
+                redact.reg(registration))
     if want:
         return _back("/fleet", notice=f"{registration} archived — it will not be reminded about.")
     return _back(f"/vehicles/{registration}", notice=f"{registration} restored.")
@@ -632,5 +635,5 @@ def delete(
         )
     if not db.delete_vehicle(registration):
         return _back("/fleet", error=f"No vehicle {registration}.")
-    logger.warning("%s permanently deleted %s", auth.actor(user), registration)
+    logger.warning("%s permanently deleted %s", auth.actor(user), redact.reg(registration))
     return _back("/fleet", notice=f"{registration} and its reminder history were deleted.")

@@ -7,6 +7,7 @@ from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 from ai.graph import run_graph
 from bot.message import Message
+from utils import redact
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ async def _handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user    = update.effective_user
     user_id = f"telegram:{user.id}"
     chat_id = str(update.effective_chat.id)
-    logger.info("Telegram [%s]: %s", user_id, update.message.text[:80])
+    logger.info("Telegram [%s]: %s", user_id, redact.text(update.message.text))
 
     msg = Message(platform="telegram", user_id=user_id, chat_id=chat_id, text=update.message.text)
     try:

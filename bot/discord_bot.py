@@ -6,6 +6,7 @@ import discord
 
 from ai.graph import run_graph
 from bot.message import Message
+from utils import redact
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ async def on_message(message: discord.Message) -> None:
 
     user_id = f"discord:{message.author.id}"
     chat_id = str(message.channel.id)
-    logger.info("Discord DM [%s]: %s", user_id, message.content[:80])
+    logger.info("Discord DM [%s]: %s", user_id, redact.text(message.content))
 
     msg = Message(platform="discord", user_id=user_id, chat_id=chat_id, text=message.content)
     try:

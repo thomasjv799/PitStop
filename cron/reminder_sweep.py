@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from dotenv import load_dotenv
 
 from db import client as db
+from utils import redact
 from utils.email_digest import send_digest
 from utils.notify import notify
 
@@ -86,7 +87,11 @@ def sweep() -> int:
                     "days": remaining,
                     "offset": offset,
                 })
-                logger.info("Sent: %s %s offset=%d", v["registration_number"], field, offset)
+                # This log is world readable: the sweep runs in GitHub
+                # Actions on a public repository. The vehicle id identifies
+                # nobody outside the database and debugs just as well.
+                logger.info("Sent: vehicle %s %s offset=%d",
+                            redact.vehicle(v), field, offset)
 
     # After the loop, and deliberately last: the reminders are already sent
     # and logged, so a failing mailbox must not take the sweep down with it.

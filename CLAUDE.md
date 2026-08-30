@@ -114,6 +114,30 @@ WEB_HOST / WEB_PORT     dev server bind (default 127.0.0.1:8000)
 WEB_SOON_DAYS           "due soon" window in days (default 30)
 ```
 
+## Logging and PII
+
+`utils/redact.py` keeps identifying data out of log lines. This matters most
+for the cron sweep, which runs in GitHub Actions on a **public** repository —
+its job log is world readable — but the same rule is applied throughout.
+
+- `redact.vehicle(row)` → `#7`. Preferred: an id identifies nobody outside the
+  database and debugs just as well. The sweep uses this.
+- `redact.reg("KL04AS1371")` → `KL04••••71`, for the web routes that only hold
+  the mark. Keeps the RTO prefix and last two digits, enough to tell vehicles
+  apart in a log.
+- `redact.email(addr)` → `t•••@gmail.com`. The domain survives because "did it
+  reach the right provider" is a real question; the local part does not.
+- `redact.text(body)` → `<25 chars>`. The bots used to log up to 80 characters
+  of whatever a user typed.
+
+Opaque identifiers are deliberately **not** masked: the OIDC subject and the
+`web:<sub>` actor string are the audit trail, and masking them would lose who
+did what without gaining any privacy.
+
+One known gap: a psycopg2 `UniqueViolation` message embeds the conflicting key
+value, so a duplicate-registration error logged with `exc_info` can carry the
+mark. That path is web-only, where logs are private to the host.
+
 ## Deployment
 
 - **Web app → Vercel.** `api/index.py` is the ASGI entrypoint, `api/requirements.txt` is a **web-only** dependency set (the bots' AI stack would blow past the 250 MB bundle cap for code the web app never calls), and `vercel.json` sets `includeFiles: "web/**"` — without it the app imports fine and then 500s on the first template render. Use Supabase's **transaction** pooler (port 6543) with `DB_POOL_MIN=0`: each invocation may be a fresh instance, and `ThreadedConnectionPool` otherwise opens connections eagerly on every cold start. Full notes in `docs/deploy-vercel.md`.
