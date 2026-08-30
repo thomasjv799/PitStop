@@ -7,6 +7,8 @@ than on the first request that tries to set a cookie.
 import os
 import secrets
 
+from utils.env import env_bool, env_int, env_str
+
 # Google's OIDC discovery document lives at a fixed, well-known address.
 GOOGLE_ISSUER = "https://accounts.google.com"
 
@@ -48,11 +50,7 @@ NAV = (
 ADMIN_NAV = (("users", "/admin/users", "People"),)
 
 # A document this many days out or nearer counts as "due soon".
-SOON_DAYS = int(os.getenv("WEB_SOON_DAYS", "30"))
-
-
-def _truthy(value: str | None) -> bool:
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+SOON_DAYS = env_int("WEB_SOON_DAYS", 30)
 
 
 class Settings:
@@ -63,28 +61,28 @@ class Settings:
         #          treated as an approved admin. Local work only.
         # google — Google sign-in. Anyone with a Google account can sign in;
         #          an admin must approve them before they see any fleet data.
-        self.auth_mode = os.getenv("AUTH_MODE", "dev").strip().lower()
-        self.dev_user = os.getenv("DEV_USER", "dev")
-        self.dev_user_name = os.getenv("DEV_USER_NAME", "Local dev")
+        self.auth_mode = env_str("AUTH_MODE", "dev").lower()
+        self.dev_user = env_str("DEV_USER", "dev")
+        self.dev_user_name = env_str("DEV_USER_NAME", "Local dev")
 
-        self.oidc_issuer = os.getenv("OIDC_ISSUER", GOOGLE_ISSUER).rstrip("/")
-        self.oidc_client_id = os.getenv("OIDC_CLIENT_ID", "")
-        self.oidc_client_secret = os.getenv("OIDC_CLIENT_SECRET", "")
-        self.oidc_scopes = os.getenv("OIDC_SCOPES", "openid email profile")
-        self.oidc_provider_name = os.getenv("OIDC_PROVIDER_NAME", "Google")
+        self.oidc_issuer = env_str("OIDC_ISSUER", GOOGLE_ISSUER).rstrip("/")
+        self.oidc_client_id = env_str("OIDC_CLIENT_ID")
+        self.oidc_client_secret = env_str("OIDC_CLIENT_SECRET")
+        self.oidc_scopes = env_str("OIDC_SCOPES", "openid email profile")
+        self.oidc_provider_name = env_str("OIDC_PROVIDER_NAME", "Google")
 
         # The callback URL registered with the provider. Normally derived
         # from the request, but behind a TLS-terminating reverse proxy that
         # yields http:// while the provider has https:// registered, and the
         # handshake fails with redirect_uri_mismatch. Set this explicitly and
         # the guesswork goes away.
-        self.oidc_redirect_uri = os.getenv("OIDC_REDIRECT_URI", "").strip()
+        self.oidc_redirect_uri = env_str("OIDC_REDIRECT_URI")
 
         # The owner. On their first sign-in this address is approved as an
         # admin automatically — otherwise there would be nobody able to
         # approve the first account. Matched case-insensitively, and only
         # ever applied when creating the row.
-        self.admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
+        self.admin_email = env_str("ADMIN_EMAIL").lower()
 
         # Misconfiguration is collected, not raised. Raising here happens at
         # import, which on a serverless host means the function dies before it
@@ -103,7 +101,7 @@ class Settings:
         # A generated secret is fine for AUTH_MODE=dev — it only means sessions
         # do not survive a restart — but a real sign-in must not silently
         # invalidate its own state cookie mid-handshake, or between instances.
-        secret = os.getenv("SESSION_SECRET", "")
+        secret = env_str("SESSION_SECRET")
         if not secret:
             if self.auth_mode != "dev":
                 self.config_errors.append(
@@ -131,13 +129,13 @@ class Settings:
                 "ADMIN_EMAIL is required when AUTH_MODE is not 'dev' — without "
                 "it no account can ever be approved, because there is no admin"
             )
-        if not os.getenv("DATABASE_URI"):
+        if not env_str("DATABASE_URI"):
             self.config_warnings.append(
                 "DATABASE_URI is not set — pages that read the fleet will fail"
             )
 
-        self.session_https_only = _truthy(os.getenv("SESSION_HTTPS_ONLY", "0"))
-        self.session_max_age = int(os.getenv("SESSION_MAX_AGE", str(60 * 60 * 12)))
+        self.session_https_only = env_bool("SESSION_HTTPS_ONLY", False)
+        self.session_max_age = env_int("SESSION_MAX_AGE", 60 * 60 * 12)
 
     @property
     def is_oidc(self) -> bool:

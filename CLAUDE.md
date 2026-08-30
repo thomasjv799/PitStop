@@ -115,6 +115,22 @@ WEB_HOST / WEB_PORT     dev server bind (default 127.0.0.1:8000)
 WEB_SOON_DAYS           "due soon" window in days (default 30)
 ```
 
+## Reading environment variables
+
+Always through `utils/env.py` (`env_str`, `env_int`, `env_bool`, `env_list`),
+never `os.getenv` directly. `os.getenv(name, default)` returns the default
+only when a variable is **absent** — present-but-empty comes back as `""`, so
+`int(os.getenv("WEB_SOON_DAYS", "30"))` raises rather than yielding 30.
+
+That is not hypothetical: adding a key and leaving the value blank is ordinary
+in the Vercel, Railway and GitHub Actions UIs, and it took down the first
+Vercel deploy at import time with `FUNCTION_INVOCATION_FAILED`. The helpers
+treat blank as absent and a malformed number as absent-with-a-warning, because
+a bad tuning value should not stop the app booting.
+
+`tests/test_env.py` imports the whole config with every setting set to the
+empty string, which is what the failure actually looked like.
+
 ## Logging and PII
 
 `utils/redact.py` keeps identifying data out of log lines. This matters most

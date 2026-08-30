@@ -12,6 +12,8 @@ from psycopg2 import pool as pgpool
 from psycopg2 import sql as pgsql
 from psycopg2.extras import RealDictCursor
 
+from utils.env import env_int, env_str
+
 logger = logging.getLogger(__name__)
 
 _ALLOWED_UPDATE_FIELDS = frozenset({
@@ -91,11 +93,11 @@ def _get_pool():
                     logger.warning(warning)
                 try:
                     _POOL = pgpool.ThreadedConnectionPool(
-                        minconn=int(os.getenv("DB_POOL_MIN", "1")),
-                        maxconn=int(os.getenv("DB_POOL_MAX", "8")),
+                        minconn=env_int("DB_POOL_MIN", 1),
+                        maxconn=env_int("DB_POOL_MAX", 8),
                         dsn=dsn,
-                        connect_timeout=int(os.getenv("DB_CONNECT_TIMEOUT", "10")),
-                        application_name=os.getenv("DB_APP_NAME", "pitstop"),
+                        connect_timeout=env_int("DB_CONNECT_TIMEOUT", 10),
+                        application_name=env_str("DB_APP_NAME", "pitstop"),
                     )
                 except psycopg2.OperationalError as exc:
                     # Without this the failure reads as a bare timeout, which

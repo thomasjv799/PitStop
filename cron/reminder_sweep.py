@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 from db import client as db
 from utils import redact
+from utils.env import env_str
 from utils.email_digest import send_digest
 from utils.notify import notify
 
@@ -48,11 +49,12 @@ def _build_message(vehicle: dict, label: str, expiry: date, remaining: int) -> s
 def sweep() -> int:
     today    = date.today()
     vehicles = db.get_all_vehicles_with_expiry()
-    platform = os.environ.get("CRON_NOTIFY_PLATFORM", "discord")
+    platform = env_str("CRON_NOTIFY_PLATFORM", "discord")
     chat_id  = (
-        os.environ.get("CRON_NOTIFY_CHAT_ID")
-        or os.environ.get("DISCORD_CHANNEL_ID")
-        or os.environ.get("TELEGRAM_CHAT_ID")
+        env_str("CRON_NOTIFY_CHAT_ID")
+        or env_str("DISCORD_CHANNEL_ID")
+        or env_str("TELEGRAM_CHAT_ID")
+        or None
     )
     sent = 0
     # Collected for the email digest: the chat message goes out per document,

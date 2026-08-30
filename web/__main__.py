@@ -11,12 +11,14 @@ import os
 import uvicorn
 from dotenv import load_dotenv
 
+from utils.env import env_bool, env_int, env_str
+
 load_dotenv()
 
 if __name__ == "__main__":
     uvicorn.run(
         "web.app:app",
-        host=os.getenv("WEB_HOST", "127.0.0.1"),
-        port=int(os.getenv("WEB_PORT", "8000")),
-        reload=os.getenv("WEB_RELOAD", "0").strip().lower() in {"1", "true", "yes"},
+        host=env_str("WEB_HOST", "127.0.0.1"),
+        port=env_int("WEB_PORT", 8000),
+        reload=env_bool("WEB_RELOAD", False),
     )

@@ -15,6 +15,8 @@ from typing import Any, Iterable, Optional
 
 import requests
 
+from utils.env import env_bool, env_list, env_str
+
 logger = logging.getLogger(__name__)
 
 RESEND_ENDPOINT = "https://api.resend.com/emails"
@@ -33,7 +35,7 @@ DEFAULT_EMAIL_OFFSETS = (-7, -1)
 
 def email_offsets() -> set[int]:
     """The offsets that earn an email, from EMAIL_OFFSETS or the default."""
-    raw = os.getenv("EMAIL_OFFSETS", "").strip()
+    raw = env_str("EMAIL_OFFSETS")
     if not raw:
         return set(DEFAULT_EMAIL_OFFSETS)
     out = set()
@@ -72,11 +74,12 @@ _ACCENT = "#2563eb"
 
 
 def _enabled() -> bool:
-    flag = os.getenv("ENABLE_EMAIL")
-    if flag is not None:
-        return flag.strip().lower() in {"1", "true", "yes", "on"}
-    # No explicit flag: send whenever a key is configured.
-    return bool(os.getenv("RESEND_API_KEY"))
+    # An ENABLE_EMAIL key left blank in a dashboard must read as "not set",
+    # not as "off" — otherwise adding the row silently disables email.
+    flag = env_str("ENABLE_EMAIL")
+    if flag:
+        return env_bool("ENABLE_EMAIL")
+    return bool(env_str("RESEND_API_KEY"))
 
 
 def _phrase(days: int) -> str:
@@ -247,7 +250,7 @@ def build_digest(items: Iterable[dict], today: Optional[date] = None) -> tuple[s
 
 
 def env_recipients() -> list[str]:
-    return [a.strip() for a in os.getenv("EMAIL_TO", "").split(",") if a.strip()]
+    return env_list("EMAIL_TO")
 
 
 def resolve_recipients() -> list[str]:
@@ -287,7 +290,7 @@ def send_digest(items: Iterable[dict], today: Optional[date] = None) -> bool:
         return False
 
     api_key = os.environ["RESEND_API_KEY"]
-    sender = os.getenv("EMAIL_FROM", "PitStop <aiassistant@thomasjvarghese.com>")
+    sender = env_str("EMAIL_FROM", "PitStop <aiassistant@thomasjvarghese.com>")
     recipients = resolve_recipients()
     if not recipients:
         logger.warning("No active recipients and EMAIL_TO is unset; skipping the digest.")
