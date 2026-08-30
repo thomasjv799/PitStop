@@ -1,0 +1,66 @@
+{# Shared bits of the urgency language, so the matrix, the queue, the
+   timeline and the detail page all say the same thing the same way. #}
+
+{% macro badge(cell) -%}
+  {%- if cell.status == 'na' -%}
+    <span class="na">—</span>
+  {%- elif cell.status == 'ok' -%}
+    <span class="plain">{{ cell.date_text }}</span>
+  {%- elif cell.status == 'snoozed' -%}
+    <span class="struck">{{ cell.days_text }}</span><span class="badge badge-mute">snoozed</span>
+  {%- elif cell.status == 'overdue' -%}
+    <span class="badge badge-over">{{ cell.days_text }}</span>
+  {%- else -%}
+    <span class="badge badge-soon">{{ cell.days_text }}</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{# The data-* payload the action dialog reads. Kept in one place so a new
+   field cannot drift between the pages that open the dialog. #}
+{% macro cellattrs(cell, vehicle_id, reg, nickname) -%}
+  data-doc
+  data-vehicle-id="{{ vehicle_id }}"
+  data-reg="{{ reg }}"
+  data-nickname="{{ nickname }}"
+  data-field="{{ cell.field }}"
+  data-label="{{ cell.long_label }}"
+  data-date="{{ cell.date.isoformat() if cell.date else '' }}"
+  data-date-text="{{ cell.long_date_text }}"
+  data-days-text="{{ cell.days_text }}"
+  data-status="{{ cell.status }}"
+  data-sent="{{ cell.reminders_sent }}"
+  data-total="{{ cell.reminders_total }}"
+  data-next-offset="{{ cell.next_offset if cell.next_offset is not none else '' }}"
+  data-next-date="{{ cell.next_offset_date }}"
+  data-snooze-until="{{ cell.snoozed_until.isoformat() if cell.snoozed_until else '' }}"
+  data-snooze-reason="{{ cell.snooze_reason }}"
+  data-snooze-by="{{ cell.snooze_by }}"
+{%- endmacro %}
+
+{# One text input in the add/edit form, with its error state. #}
+{% macro textfield(name, label, form, errors, placeholder='', type='text', required=false, hint='') -%}
+<div class="field">
+  <label for="f-{{ name }}">{{ label }}{% if required %} <span class="req">*</span>{% endif %}</label>
+  <input class="input" type="{{ type }}" id="f-{{ name }}" name="{{ name }}"
+         value="{{ form.get(name, '') }}" placeholder="{{ placeholder }}"
+         {% if required %}required{% endif %}
+         {% if errors.get(name) %}aria-invalid="true" aria-describedby="e-{{ name }}"{% endif %}>
+  {% if errors.get(name) %}<span class="field-error" id="e-{{ name }}">{{ errors[name] }}</span>
+  {% elif hint %}<span class="hint">{{ hint }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{# A free-text field with suggestions — the columns are not enumerations, so
+   a value outside the list still saves. #}
+{% macro suggestfield(name, label, form, errors, options) -%}
+<div class="field">
+  <label for="f-{{ name }}">{{ label }}</label>
+  <input class="input" type="text" id="f-{{ name }}" name="{{ name }}"
+         value="{{ form.get(name, '') }}" list="l-{{ name }}" autocomplete="off"
+         {% if errors.get(name) %}aria-invalid="true"{% endif %}>
+  <datalist id="l-{{ name }}">
+    {% for option in options %}<option value="{{ option }}"></option>{% endfor %}
+  </datalist>
+  {% if errors.get(name) %}<span class="field-error">{{ errors[name] }}</span>{% endif %}
+</div>
+{%- endmacro %}

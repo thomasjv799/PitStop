@@ -1,0 +1,88 @@
+{% extends "_shell.html" %}
+{% from "_macros.html" import textfield, suggestfield %}
+{% block title %}{% if mode == 'edit' %}Edit {{ vehicle.registration_number }}{% else %}Add vehicle{% endif %} · PitStop{% endblock %}
+
+{% block main %}
+<div class="pagehead">
+  <div>
+    <div class="crumb">
+      <a href="/fleet">Fleet</a> /
+      {% if mode == 'edit' %}<a href="/vehicles/{{ vehicle.registration_number }}">{{ vehicle.registration_number }}</a> / Edit
+      {% else %}Add vehicle{% endif %}
+    </div>
+    <h1>{% if mode == 'edit' %}Edit vehicle{% else %}Add a vehicle{% endif %}</h1>
+    <div class="sub">
+      {% if mode == 'edit' %}Changes are written to the same records the bot and the cron sweep read.
+      {% else %}Only the registration number is required — expiry dates can be filled in later.{% endif %}
+    </div>
+  </div>
+</div>
+
+{% if errors %}
+<p class="flash flash-error">
+  {{ errors | length }} field{{ '' if errors | length == 1 else 's' }} need attention below.
+</p>
+{% endif %}
+
+<form class="card form" method="post"
+      action="{% if mode == 'edit' %}/vehicles/{{ vehicle.registration_number }}/edit{% else %}/vehicles/new{% endif %}"
+      novalidate>
+
+  <div class="formsection">
+    <h2>Identity</h2>
+    <div class="sub">The registration mark is stored without spaces or hyphens, so <b>KL 04-AS 1371</b> and <b>kl04as1371</b> are the same vehicle.</div>
+    <div class="grid2">
+      {{ textfield('registration_number', 'Registration number', form, errors,
+                   placeholder='KL04AS1371', required=true) }}
+      {{ textfield('nickname', 'Nickname', form, errors,
+                   placeholder='Swift', hint='What the reminders will call it.') }}
+      {{ textfield('owner_name', 'Owner', form, errors, placeholder='Thomas V') }}
+      {{ textfield('registration_date', 'Registered on', form, errors, type='date') }}
+    </div>
+  </div>
+
+  <div class="formsection">
+    <h2>Specification</h2>
+    <div class="sub">Optional, and free text — the suggestions are just the common values. These are the fields the VAHAN import fills in.</div>
+    <div class="grid2">
+      {{ textfield('manufacturer', 'Manufacturer', form, errors, placeholder='Maruti Suzuki') }}
+      {{ textfield('model', 'Model', form, errors, placeholder='Swift VXI') }}
+      {{ suggestfield('vehicle_class', 'Class', form, errors, vehicle_classes) }}
+      {{ suggestfield('fuel_type', 'Fuel type', form, errors, fuel_types) }}
+      {{ textfield('emission_norms', 'Emission norms', form, errors, placeholder='BHARAT STAGE VI') }}
+      {{ textfield('rto', 'RTO', form, errors, placeholder='ERNAKULAM') }}
+      {{ textfield('state', 'State', form, errors, placeholder='Kerala') }}
+    </div>
+  </div>
+
+  <div class="formsection">
+    <h2>Policy and permit</h2>
+    <div class="sub">Reference numbers carried alongside the expiry dates.</div>
+    <div class="grid2">
+      {{ textfield('insurance_company', 'Insurer', form, errors, placeholder='ICICI Lombard') }}
+      {{ textfield('insurance_policy_no', 'Policy number', form, errors) }}
+      {{ suggestfield('permit_type', 'Permit type', form, errors,
+                      ['Goods (National)', 'Goods (State)', 'Contract carriage', 'Stage carriage']) }}
+      {{ textfield('permit_no', 'Permit number', form, errors) }}
+    </div>
+  </div>
+
+  <div class="formsection">
+    <h2>Document expiry</h2>
+    <div class="sub">Leave a document blank if it does not apply. Each date you set starts its own reminder cycle at −7 days.</div>
+    <div class="grid2">
+      {% for field, short, long in documents %}
+      {{ textfield(field, long, form, errors, type='date') }}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="formactions">
+    {% if mode == 'edit' %}<span class="spacer">Editing {{ vehicle.registration_number }}</span>{% endif %}
+    <a class="btn" href="{% if mode == 'edit' %}/vehicles/{{ vehicle.registration_number }}{% else %}/fleet{% endif %}">Cancel</a>
+    <button class="btn btn-primary" type="submit">
+      {% if mode == 'edit' %}Save changes{% else %}Add vehicle{% endif %}
+    </button>
+  </div>
+</form>
+{% endblock %}

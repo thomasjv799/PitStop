@@ -1,6 +1,6 @@
 # Smart Reminder System
  
-A self-hosted vehicle document expiry tracker. Sends escalating reminders via Telegram (and optionally Discord) before and after documents expire. Responds to natural language queries via an AI bot powered by Groq + LangGraph.
+A self-hosted vehicle document expiry tracker. Sends escalating reminders via Telegram (and optionally Discord) before and after documents expire. Responds to natural language queries via an AI bot powered by Groq + LangGraph, and puts the whole fleet on a web dashboard behind Google sign-in with an admin approval gate.
 
 ---
 
@@ -27,6 +27,12 @@ Telegram / Discord DM
 
 cron/reminder_sweep.py    daily GitHub Actions job — escalating reminder schedule
 utils/notify.py           platform router — Telegram / Discord send
+
+Browser
+        │
+   web/auth.py            Google sign-in + the admin approval gate
+   web/app.py             FastAPI routes over the same db/client.py
+   web/service.py         vehicle rows → dashboard / matrix / timeline / detail
 ```
 
 **Reminder schedule (per document, per vehicle):**
@@ -60,6 +66,14 @@ db/
   client.py            psycopg2 helpers (public schema — vehicles, reminder_log, etc.)
 utils/
   notify.py            notify(msg, platform, chat_id) — Telegram / Discord send
+web/
+  app.py               FastAPI routes — pages, actions, admin
+  auth.py              AUTH_MODE=dev | google — sign-in and the approval gate
+  config.py            The five documents, the nine offsets, nav, Settings
+  service.py           Pure view-model builders — status, queue, timeline, detail
+  templates/           Jinja2 — shell, login, pending, dashboard, fleet,
+                       timeline, vehicle, users, costs
+  static/              nocturne.css (design system), app.css, app.js
 tests/                 pytest unit tests
 main.py                Entrypoint — starts Telegram + Discord bots in threads
 ```
@@ -109,11 +123,130 @@ Run the cron sweep manually:
 python -m cron.reminder_sweep
 ```
 
+Run the web dashboard:
+
+```bash
+python -m web            # http://127.0.0.1:8000
+```
+
+With `AUTH_MODE=dev` (the default) the sign-in button signs you in as `DEV_USER`
+and treats you as an approved admin — no Google client needed. Everything else
+is live: real vehicles, and every action writes to Postgres.
+
+Apply the migrations once before first run:
+
+```bash
+psql "$DATABASE_URI" -f db/migrations/004_vehicle_archive_and_delete.sql
+psql "$DATABASE_URI" -f db/migrations/005_web_users.sql
+psql "$DATABASE_URI" -f db/migrations/006_enable_rls.sql
+psql "$DATABASE_URI" -f db/migrations/007_notification_recipients.sql
+```
+
+`006` turns on row-level security with no policies. Supabase exposes every
+table in `public` to the `anon` and `authenticated` roles, and neither has
+`BYPASSRLS` — so no policies means no access through the publishable key.
+Nothing here uses that key: the bot, the sweep and the web app all connect as
+`postgres`, which does have `BYPASSRLS`, so they are unaffected.
+
+In production run uvicorn behind the reverse proxy that terminates TLS:
+
+```bash
+uvicorn web.app:app --host 0.0.0.0 --port 8000 --proxy-headers
+```
+
 Run tests:
 
 ```bash
 pytest
 ```
+
+`tests/test_db.py` and the sweep tests in `tests/test_cron.py` talk to a real
+database and need `DATABASE_URI` set; the rest run offline.
+
+---
+
+## Sign-in and access
+
+PitStop uses Google sign-in, and **signing in is not the same as being allowed
+in.** Anyone with a Google account can complete the flow; they land in a
+waiting room and see nothing about the fleet until an administrator approves
+them at `/admin/users`.
+
+**Full walkthrough: [docs/google-oauth.md](docs/google-oauth.md)** — including
+the consent-screen decisions and the `redirect_uri_mismatch` gotcha.
+
+In short: create an OAuth client at *console.cloud.google.com → APIs & Services
+→ Credentials → OAuth client ID → Web application*, with authorised redirect
+URI `https://<your-host>/auth/callback`, then:
+
+```bash
+AUTH_MODE=google
+SESSION_SECRET=$(python -c "import secrets;print(secrets.token_urlsafe(32))")
+OIDC_CLIENT_ID=...
+OIDC_CLIENT_SECRET=...
+ADMIN_EMAIL=you@gmail.com     # approved as admin on first sign-in
+OIDC_REDIRECT_URI=https://<your-host>/auth/callback   # set behind a TLS proxy
+```
+
+`ADMIN_EMAIL` is the bootstrap: that address is approved as an admin the first
+time it signs in, because otherwise there would be nobody able to approve the
+first account. It applies only when the account row is created — re-signing in
+never re-grants anything, and an admin who was deliberately demoted stays
+demoted. The address must be verified by Google before it counts.
+
+On `/admin/users` an admin can approve, revoke, promote to admin, demote, or
+remove an account. Three things are refused: revoking your own access, demoting
+or removing the last admin, and removing your own account — each would leave
+the instance with nobody able to undo it.
+
+---
+
+## The web app
+
+| Page | What it is |
+| --- | --- |
+| `/` Dashboard | Fleet counts, then a queue of the individual documents that need doing, nearest expiry first |
+| `/fleet` | The document matrix — one row per vehicle, five document columns |
+| `/timeline` | A −60d…+90d rail with every document in the window plotted against today |
+| `/vehicles/<reg>` | Every column on the vehicle, plus each document's nine-step reminder ladder |
+| `/vehicles/new` | Add a vehicle |
+| `/vehicles/<reg>/edit` | Edit every detail and expiry date |
+| `/costs` | Stub — premium and tax tracking, not built yet |
+| `/admin/users` | Approve sign-ins, and manage who gets reminder emails (admins only) |
+
+**How urgency reads.** A document more than `WEB_SOON_DAYS` (default 30) away
+shows its date plainly; anything nearer or already past gets a day-count chip —
+amber for due, red for overdue. A snoozed document is struck through and tagged
+instead, so a deliberate dismissal never reads as an alarm, and it drops out of
+the overdue count.
+
+**Actions.** Clicking any document opens its dialog:
+
+- **Renew** — write a new expiry date. `reminder_log` is keyed on the expiry
+  date, so a new date restarts the escalation at −7d on its own.
+- **Snooze** — suppress reminders for 7, 14 or 30 days, or indefinitely, with a
+  reason. Recorded in `reminder_snooze` as `web:<user>`, the same
+  `platform:id` shape the bots write, so the cron sweep skips it exactly as it
+  does for a snooze set from Discord.
+
+**Archive and delete** are on every row of the fleet list (edit / archive /
+delete, revealed on hover) and on the vehicle page. *Archive* sets
+`vehicles.status = 'archived'`: the row and its history stay, but the vehicle
+drops out of the fleet, the cron sweep and the bot, and an *Archived* filter
+brings it back. *Delete* is permanent — it removes the vehicle and cascades its
+reminder history — and requires the registration typed back to confirm.
+
+**Adding and editing.** Only the registration number is required; everything
+else can be filled in later. Registration marks are normalised on the way in,
+so `KL 04-AS 1371` and `kl04as1371` are the same vehicle and the bot, the cron
+sweep and the web app never disagree about which one you meant. The form
+refuses a duplicate registration, and refuses an expiry date that falls before
+the vehicle was registered — that is a typo, not a lapsed document.
+
+**Themes.** Light and dark, with a three-way control in the header: follow the
+system, force light, force dark. The choice is remembered per browser and
+applied before first paint. Design tokens live in `web/static/theme.css`;
+`web/static/app.css` holds layout only and introduces no colour of its own.
 
 ---
 

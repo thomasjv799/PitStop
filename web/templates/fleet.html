@@ -1,0 +1,103 @@
+{% extends "_shell.html" %}
+{% from "_macros.html" import badge, cellattrs %}
+{% block title %}Fleet · PitStop{% endblock %}
+
+{% block main %}
+<div class="pagehead">
+  <div>
+    <h1>Fleet</h1>
+    <div class="sub">
+      {{ stats.total }} vehicle{{ '' if stats.total == 1 else 's' }} ·
+      {{ stats.overdue }} overdue · {{ stats.soon }} due within {{ soon_days }} days
+    </div>
+  </div>
+  <div class="headactions">
+    <div class="seg">
+      <a class="seg-opt" href="/fleet" {% if scope == 'all' %}aria-current="page"{% endif %}>All</a>
+      <a class="seg-opt" href="/fleet?scope=attention" {% if scope == 'attention' %}aria-current="page"{% endif %}>Needs attention</a>
+      <a class="seg-opt" href="/fleet?scope=archived" {% if scope == 'archived' %}aria-current="page"{% endif %}>Archived</a>
+    </div>
+    <a class="btn btn-primary" href="/vehicles/new">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Add vehicle
+    </a>
+  </div>
+</div>
+
+{% if rows %}
+<div class="card scroll-x">
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th>Vehicle</th>
+        {% for field, short, long in documents %}<th>{{ short }}</th>{% endfor %}
+        <th class="acts-head"><span class="sr-only">Actions</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="vcell">
+          <a class="vname" href="/vehicles/{{ row.registration_number }}">{{ row.nickname }}</a>
+          <span class="vreg">{{ row.registration_number }}{% if row.owner_name %} · {{ row.owner_name }}{% endif %}</span>
+        </td>
+        {% for cell in row.cells %}
+        <td>
+          <button type="button" class="doc"
+                  {{ cellattrs(cell, row.id, row.registration_number, row.nickname) }}
+                  aria-label="{{ cell.long_label }} for {{ row.nickname }}{% if cell.date_text %}, expires {{ cell.date_text }}{% else %}, not set{% endif %}">
+            {{ badge(cell) }}
+          </button>
+        </td>
+        {% endfor %}
+        <td class="acts">
+          <div class="rowacts">
+            <a class="iconbtn" href="/vehicles/{{ row.registration_number }}/edit"
+               title="Edit {{ row.registration_number }}" aria-label="Edit {{ row.registration_number }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/></svg>
+            </a>
+            <form method="post" action="/vehicles/{{ row.registration_number }}/archive">
+              <input type="hidden" name="archived" value="{{ '0' if row.archived else '1' }}">
+              <button class="iconbtn" type="submit"
+                      title="{{ 'Restore' if row.archived else 'Archive' }} {{ row.registration_number }}"
+                      aria-label="{{ 'Restore' if row.archived else 'Archive' }} {{ row.registration_number }}">
+                {% if row.archived %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></svg>
+                {% else %}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11h14V8M10 12h4"/></svg>
+                {% endif %}
+              </button>
+            </form>
+            <button class="iconbtn danger" type="button" data-action="open-delete"
+                    data-reg="{{ row.registration_number }}" data-nickname="{{ row.nickname }}"
+                    title="Delete {{ row.registration_number }}" aria-label="Delete {{ row.registration_number }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card empty">
+  {% if scope == 'attention' %}
+    <h2>Nothing needs attention</h2>
+    <p>Every document is more than {{ soon_days }} days out.</p>
+  {% elif scope == 'archived' %}
+    <h2>No archived vehicles</h2>
+    <p>Archiving a vehicle keeps its record but stops all reminders.</p>
+  {% else %}
+    <h2>No vehicles yet</h2>
+    <p>Add your first vehicle and PitStop will start tracking its documents.</p>
+    <a class="btn btn-primary" href="/vehicles/new">Add a vehicle</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% include "_dialog.html" with context %}
+{% include "_delete_dialog.html" with context %}
+{% endblock %}

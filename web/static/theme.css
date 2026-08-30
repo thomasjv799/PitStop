@@ -1,0 +1,306 @@
+/* PitStop — design tokens, base elements and primitives.
+ *
+ * Two themes from one token set. The root carries `data-theme="light"` or
+ * `"dark"` once the viewer picks; with no attribute the OS preference wins.
+ * Every rule below reads a token — no page hard-codes a colour.
+ *
+ * The shape language is bento: discrete rounded cards floating on a soft
+ * ground, generous radii, pill-shaped badges and nav items, and status
+ * carried by soft tinted panels rather than heavy borders.
+ */
+
+:root {
+  color-scheme: light;
+
+  --bg:            #f4f5f8;   /* the ground the cards float on */
+  --bg-subtle:     #fafbfc;
+  --surface:       #ffffff;   /* cards */
+  --surface-hover: #f5f6f9;
+  --surface-sunk:  #f4f5f8;
+  --border:        #ebedf1;
+  --border-strong: #d9dde4;
+
+  --text:        #101828;
+  --text-muted:  #667085;
+  --text-faint:  #98a2b3;
+
+  --accent:       #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-text:  #ffffff;
+  --accent-soft:  #eff4ff;
+  --accent-line:  #b2ccff;
+
+  /* Status is semantic, not decorative: red is overdue, amber is due soon,
+     green is clear. Nothing else in the interface uses these hues. */
+  --over:      #d92d20;
+  --over-text: #b42318;
+  --over-soft: #fef3f2;
+  --soon:      #dc6803;
+  --soon-text: #b54708;
+  --soon-soft: #fffaeb;
+  --ok:        #039855;
+  --ok-text:   #027a48;
+  --ok-soft:   #ecfdf3;
+
+  /* Ink-tinted and soft — cards lift off the ground rather than being
+     outlined. On dark the same role is carried by depth, not a hairline. */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .04);
+  --shadow-md: 0 2px 4px rgba(16, 24, 40, .04), 0 6px 16px rgba(16, 24, 40, .06);
+  --shadow-lg: 0 12px 40px rgba(16, 24, 40, .16);
+
+  --radius-sm:   8px;
+  --radius:      10px;
+  --radius-lg:   16px;
+  --radius-pill: 100px;
+
+  --font: "Inter var", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, "Liberation Mono", monospace;
+}
+
+/* Dark values, defined once and applied by either route. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg:            #0a0d13;
+    --bg-subtle:     #0f141d;
+    --surface:       #151a23;
+    --surface-hover: #1c2230;
+    --surface-sunk:  #10151d;
+    --border:        #222a36;
+    --border-strong: #323b4a;
+    --text:          #e6edf3;
+    --text-muted:    #8b949e;
+    --text-faint:    #6b7482;
+    --accent:        #4493f8;
+    --accent-hover:  #69a9fa;
+    --accent-text:   #0b0f17;
+    --accent-soft:   #10233d;
+    --accent-line:   #1f4370;
+    --over:      #f85149;
+    --over-text: #ff8078;
+    --over-soft: #2a1416;
+    --soon:      #d29922;
+    --soon-text: #e3b341;
+    --soon-soft: #271d0e;
+    --ok:        #3fb950;
+    --ok-text:   #56d364;
+    --ok-soft:   #0f2417;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, .3), 0 6px 16px rgba(0, 0, 0, .35);
+    --shadow-lg: 0 12px 40px rgba(0, 0, 0, .6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:            #0a0d13;
+  --bg-subtle:     #0f141d;
+  --surface:       #151a23;
+  --surface-hover: #1c2230;
+  --surface-sunk:  #10151d;
+  --border:        #222a36;
+  --border-strong: #323b4a;
+  --text:          #e6edf3;
+  --text-muted:    #8b949e;
+  --text-faint:    #6b7482;
+  --accent:        #4493f8;
+  --accent-hover:  #69a9fa;
+  --accent-text:   #0b0f17;
+  --accent-soft:   #10233d;
+  --accent-line:   #1f4370;
+  --over:      #f85149;
+  --over-text: #ff8078;
+  --over-soft: #2a1416;
+  --soon:      #d29922;
+  --soon-text: #e3b341;
+  --soon-soft: #271d0e;
+  --ok:        #3fb950;
+  --ok-text:   #56d364;
+  --ok-soft:   #0f2417;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, .3), 0 6px 16px rgba(0, 0, 0, .35);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, .6);
+}
+
+/* ── base ─────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -.011em; line-height: 1.25; }
+h1 { font-size: 20px; }
+h2 { font-size: 16px; }
+h3 { font-size: 14px; }
+p { margin: 0 0 10px; }
+a { color: var(--accent); text-underline-offset: 2px; }
+img { display: block; max-width: 100%; }
+dl, dd { margin: 0; }
+
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+::selection { background: var(--accent-soft); }
+
+.muted { color: var(--text-muted); }
+.mono  { font-family: var(--font-mono); }
+.num   { font-variant-numeric: tabular-nums; }
+
+/* An author `display` rule outranks the UA sheet's [hidden], so anything
+   toggled with el.hidden needs this to actually disappear. */
+[hidden] { display: none !important; }
+
+/* ── buttons ──────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 36px; padding: 0 15px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 13px; font-weight: 550; line-height: 1;
+  text-decoration: none; white-space: nowrap; cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, transform .14s ease;
+}
+.btn:hover { background: var(--surface-hover); }
+.btn:active { transform: translateY(.5px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn svg { display: block; flex: none; }
+
+.btn-primary {
+  background: var(--accent); border-color: var(--accent); color: var(--accent-text);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.btn-ghost {
+  background: transparent; border-color: transparent; color: var(--text-muted);
+}
+.btn-ghost:hover { background: var(--surface-hover); color: var(--text); }
+
+.btn-danger { color: var(--over-text); border-color: var(--border-strong); }
+.btn-danger:hover { background: var(--over-soft); border-color: var(--over); }
+.btn-danger-solid { background: var(--over); border-color: var(--over); color: #fff; }
+.btn-danger-solid:hover { filter: brightness(1.08); }
+
+.btn-sm { height: 30px; padding: 0 12px; font-size: 12px; }
+.btn-block { width: 100%; }
+.btn-icon { width: 36px; padding: 0; }
+
+/* ── forms ────────────────────────────────────────────────────────────── */
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > label { font-size: 12px; font-weight: 550; color: var(--text-muted); }
+.field .hint { font-size: 11px; color: var(--text-faint); }
+.field .req { color: var(--over-text); }
+
+.input, .select, textarea.input {
+  width: 100%; height: 38px; padding: 0 13px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 13.5px;
+  transition: border-color .14s ease, box-shadow .14s ease;
+}
+.select {
+  padding-right: 30px; appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 14px top 17px, right 9px top 17px;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.input::placeholder { color: var(--text-faint); }
+.input:hover, .select:hover { border-color: var(--text-faint); }
+.input:focus-visible, .select:focus-visible {
+  border-color: var(--accent); outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.input[aria-invalid="true"] { border-color: var(--over); }
+.input[aria-invalid="true"]:focus-visible { box-shadow: 0 0 0 3px var(--over-soft); }
+.field-error { font-size: 11.5px; color: var(--over-text); }
+
+.seg {
+  display: inline-flex; padding: 3px; gap: 2px;
+  border-radius: var(--radius-pill); background: var(--surface-sunk);
+}
+.seg-opt {
+  display: inline-flex; align-items: center; padding: 5px 13px;
+  border-radius: var(--radius-pill); font-size: 12.5px;
+  cursor: pointer; color: var(--text-muted); text-decoration: none;
+  transition: background .14s ease, color .14s ease;
+}
+.seg-opt:hover { color: var(--text); }
+.seg-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+.seg-opt:has(input:checked), .seg-opt[aria-current='page'] {
+  background: var(--surface); color: var(--text);
+  font-weight: 600; box-shadow: var(--shadow-sm);
+}
+.seg-opt:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── surfaces ─────────────────────────────────────────────────────────── */
+
+/* The bento card: a discrete panel lifted off the ground. Borders are a
+   faint seam, not the thing that defines the edge — the shadow does that. */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+}
+.card-pad { padding: 18px 20px; }
+.card-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 15px 20px; border-bottom: 1px solid var(--border);
+}
+.card-head h2 { font-size: 14px; }
+.card-head .sub { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+
+/* ── badges ───────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: var(--radius-pill);
+  font-size: 11.5px; font-weight: 600; line-height: 1.45;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.badge-over   { background: var(--over-soft); color: var(--over-text); }
+.badge-soon   { background: var(--soon-soft); color: var(--soon-text); }
+.badge-ok     { background: var(--ok-soft);   color: var(--ok-text); }
+.badge-mute   { background: var(--surface-sunk); color: var(--text-muted); }
+.badge-accent { background: var(--accent-soft); color: var(--accent); }
+
+/* ── dialog ───────────────────────────────────────────────────────────── */
+
+.backdrop {
+  position: fixed; inset: 0; z-index: 40;
+  display: grid; place-items: center; padding: 16px;
+  background: rgba(16, 24, 40, .4);
+  backdrop-filter: blur(3px);
+}
+.dialog {
+  width: min(470px, 100%); max-height: 90vh; overflow-y: auto;
+  padding: 22px; border-radius: var(--radius-lg);
+  background: var(--surface); box-shadow: var(--shadow-lg);
+}
+.dialog h2 { margin-bottom: 5px; }
+.dialog-sub { font-size: 12.5px; color: var(--text-muted); margin-bottom: 18px; }
+.dialog form { display: flex; flex-direction: column; gap: 15px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+
+/* ── tables ───────────────────────────────────────────────────────────── */
+
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table th {
+  text-align: left; padding: 11px 16px;
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-muted); background: var(--surface-sunk);
+}
+.table td { padding: 12px 16px; border-top: 1px solid var(--border); }
+.table tbody tr:hover { background: var(--surface-hover); }

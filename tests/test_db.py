@@ -120,3 +120,4 @@ def test_chat_save_and_retrieve():
     assert ctx["messages"][0]["role"] == "user"
     assert ctx["messages"][1]["role"] == "assistant"
     _clean_chat(uid)
+

@@ -8,7 +8,14 @@ on:
 
 jobs:
   sweep:
-    runs-on: self-hosted
+    # Was self-hosted because Postgres only listened on the homelab LAN.
+    # That box's SSD failed and the database moved to Supabase, so the sweep
+    # runs on a GitHub-hosted runner again.
+    #
+    # DATABASE_URI must be a Supabase *pooler* URI
+    # (aws-0-<region>.pooler.supabase.com): the direct db.<ref>.supabase.co
+    # host is IPv6-only and hosted runners have no IPv6.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -28,4 +35,31 @@ jobs:
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
           CRON_NOTIFY_PLATFORM: discord
           CRON_NOTIFY_CHAT_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          # Email digest. Unset RESEND_API_KEY and the sweep simply skips it.
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          EMAIL_TO: ${{ vars.EMAIL_TO }}
         run: python -m cron.reminder_sweep
+
+      # The sweep going quiet is invisible by design — no reminders is
+      # indistinguishable from nothing being due. It had in fact been dead
+      # since the self-hosted runner's disk failed. Say so out loud.
+      - name: Report failure to Discord
+        if: failure()
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$DISCORD_BOT_TOKEN" ] || [ -z "$DISCORD_CHANNEL_ID" ]; then
+            echo "Discord secrets unset — cannot report the failure."
+            exit 0
+          fi
+          # Build the payload with json.dumps: printf turns \n into a real
+          # newline, which is an invalid control character inside a JSON string.
+          PAYLOAD=$(python3 -c 'import json, os; print(json.dumps({"content": "\u26a0\ufe0f PitStop reminder sweep FAILED \u2014 no reminders went out today.\n" + os.environ["RUN_URL"]}))')
+          curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bot $DISCORD_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data "$PAYLOAD" \
+            "https://discord.com/api/v10/channels/$DISCORD_CHANNEL_ID/messages"

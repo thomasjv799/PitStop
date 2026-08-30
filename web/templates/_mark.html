@@ -1,0 +1,9 @@
+{# The PitStop mark: a dial whose hands read as an expiry clock. #}
+{% macro mark(size=20) -%}
+<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none"
+     stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+  <circle cx="12" cy="12" r="9"></circle>
+  <path d="M12 12V7"></path>
+  <path d="M12 12l4 2.5"></path>
+</svg>
+{%- endmacro %}
