@@ -1,6 +1,7 @@
 import atexit
 import logging
 import os
+import re
 import threading
 from contextlib import contextmanager
 from datetime import date
@@ -58,19 +59,50 @@ _ORDER_BY_NEAREST = """ORDER BY LEAST(
 _POOL = None
 _POOL_LOCK = threading.Lock()
 
+# Supabase's direct host resolves to IPv6 only — IPv4 is a paid add-on. GitHub
+# hosted runners and Vercel functions are IPv4-only, so a direct URI there does
+# not fail on credentials or firewall, it simply has no address it can route
+# to. The pooler host has A records. Same database, same password, same
+# psycopg2 — only the front door differs.
+_DIRECT_HOST = re.compile(r"@db\.[a-z0-9]+\.supabase\.co\b")
+
+_DIRECT_HOST_HINT = (
+    "DATABASE_URI uses Supabase's direct host (db.<ref>.supabase.co), which "
+    "resolves to IPv6 only. GitHub Actions runners and Vercel functions have "
+    "no IPv6, so this cannot connect from either. Use the pooler host instead "
+    "— Supabase dashboard: Project Settings -> Database -> Connection string "
+    "-> Session pooler (port 5432; use 6543 for serverless). Same credentials."
+)
+
+
+def dsn_warning(dsn: str) -> Optional[str]:
+    """A human explanation if this DSN looks unroutable from CI or serverless."""
+    return _DIRECT_HOST_HINT if _DIRECT_HOST.search(dsn or "") else None
+
 
 def _get_pool():
     global _POOL
     if _POOL is None:
         with _POOL_LOCK:
             if _POOL is None:
-                _POOL = pgpool.ThreadedConnectionPool(
-                    minconn=int(os.getenv("DB_POOL_MIN", "1")),
-                    maxconn=int(os.getenv("DB_POOL_MAX", "8")),
-                    dsn=os.environ["DATABASE_URI"],
-                    connect_timeout=int(os.getenv("DB_CONNECT_TIMEOUT", "10")),
-                    application_name=os.getenv("DB_APP_NAME", "pitstop"),
-                )
+                dsn = os.environ["DATABASE_URI"]
+                warning = dsn_warning(dsn)
+                if warning:
+                    logger.warning(warning)
+                try:
+                    _POOL = pgpool.ThreadedConnectionPool(
+                        minconn=int(os.getenv("DB_POOL_MIN", "1")),
+                        maxconn=int(os.getenv("DB_POOL_MAX", "8")),
+                        dsn=dsn,
+                        connect_timeout=int(os.getenv("DB_CONNECT_TIMEOUT", "10")),
+                        application_name=os.getenv("DB_APP_NAME", "pitstop"),
+                    )
+                except psycopg2.OperationalError as exc:
+                    # Without this the failure reads as a bare timeout, which
+                    # sends you looking at credentials and firewalls.
+                    if warning:
+                        raise psycopg2.OperationalError(f"{exc}\n\n{warning}") from exc
+                    raise
                 logger.info("database pool opened")
     return _POOL
 

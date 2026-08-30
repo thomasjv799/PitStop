@@ -133,6 +133,14 @@ With `AUTH_MODE=dev` (the default) the sign-in button signs you in as `DEV_USER`
 and treats you as an approved admin — no Google client needed. Everything else
 is live: real vehicles, and every action writes to Postgres.
 
+Check the connection string before trusting it — it reports what the URI
+points at and whether that host is reachable from an IPv4-only environment,
+without ever printing the password:
+
+```bash
+python -m scripts.check_db
+```
+
 Apply the migrations once before first run:
 
 ```bash

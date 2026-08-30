@@ -32,3 +32,37 @@ def test_vehicle_columns_cover_the_live_table():
         "permit_no", "permit_valid_until",
     }
     assert selected == live
+
+
+# ── DATABASE_URI shape ───────────────────────────────────────────────────
+
+
+def test_direct_supabase_host_is_flagged_as_unroutable():
+    """db.<ref>.supabase.co has no A record — IPv4 is a paid add-on. GitHub
+    runners and Vercel functions are IPv4-only, so a direct URI there fails to
+    resolve rather than failing on credentials, which is a confusing way to
+    lose an afternoon."""
+    from db import client
+
+    warning = client.dsn_warning(
+        "postgresql://postgres:pw@db.abcdefghijklmnop.supabase.co:5432/postgres")
+    assert warning is not None
+    assert "pooler" in warning.lower()
+
+
+def test_pooler_host_is_not_flagged():
+    from db import client
+
+    for dsn in (
+        "postgresql://postgres.abc:pw@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres",
+        "postgresql://postgres.abc:pw@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres",
+        "postgresql://claude_rw:pw@localhost:5432/homelab",
+    ):
+        assert client.dsn_warning(dsn) is None
+
+
+def test_dsn_warning_tolerates_nothing():
+    from db import client
+
+    assert client.dsn_warning("") is None
+    assert client.dsn_warning(None) is None
