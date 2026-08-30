@@ -252,7 +252,23 @@ applied before first paint. Design tokens live in `web/static/theme.css`;
 
 ## Deployment
 
-Runs as a Docker container on the homelab Mac mini alongside the local Postgres DB.
+Three parts, three homes — because they have genuinely different shapes:
+
+| Part | Runs on | Why |
+| --- | --- | --- |
+| Web app (`web/`) | **Vercel** — [docs/deploy-vercel.md](docs/deploy-vercel.md) | Request/response |
+| Reminder sweep (`cron/`) | **GitHub Actions**, daily 07:00 IST | Scheduled, short-lived |
+| Discord + Telegram bots (`bot/`, `main.py`) | **A host that runs a process** | They hold open connections; a serverless function is killed between requests, so a bot there would be offline |
+
+The bots need Railway, Fly.io, a VPS, or the homelab box once it is rebuilt.
+All three read the same Supabase database, so they stay in step wherever they
+run.
+
+### Bots (Docker)
+
+Originally ran as a Docker container on the homelab Mac mini alongside a local
+Postgres. The database has since moved to Supabase, so the same image runs
+anywhere with `DATABASE_URI` set.
 
 ```bash
 docker build -t smart-reminder .

@@ -1,0 +1,14 @@
+# Vercel installs from here, not the root requirements.txt.
+#
+# The web tier only. Pulling in discord.py, python-telegram-bot, groq,
+# langgraph, langchain and langfuse would add well over a hundred megabytes
+# to a bundle capped at 250 MB unzipped, to run code the web app never calls.
+fastapi
+jinja2
+itsdangerous
+python-multipart
+authlib
+httpx
+psycopg2-binary
+requests
+python-dotenv

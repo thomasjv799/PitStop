@@ -313,5 +313,9 @@ def send_digest(items: Iterable[dict], today: Optional[date] = None) -> bool:
         logger.exception("Could not send the reminder digest")
         return False
 
-    logger.info("Digest emailed to %s (%d item(s))", ", ".join(recipients), len(items))
+    # Recipient addresses are deliberately not logged. The cron sweep runs in
+    # GitHub Actions on a public repository, where the job log is world
+    # readable — a count is enough to confirm delivery.
+    logger.info("Digest emailed to %d recipient(s), %d item(s)",
+                len(recipients), len(items))
     return True

@@ -293,3 +293,16 @@ def test_no_recipients_anywhere_sends_nothing(configured, monkeypatch):
          patch("utils.email_digest.requests.post") as post:
         assert ed.send_digest([item()], TODAY) is False
     post.assert_not_called()
+
+
+def test_recipient_addresses_are_never_logged(configured, caplog, monkeypatch):
+    """The sweep runs in GitHub Actions on a public repo, where job logs are
+    world readable."""
+    import logging
+    monkeypatch.setenv("EMAIL_TO", "secret.person@example.com")
+    with patch("db.client.list_notification_recipients", return_value=[]), \
+         patch("utils.email_digest.requests.post"), \
+         caplog.at_level(logging.INFO):
+        ed.send_digest([item()], TODAY)
+    assert "secret.person@example.com" not in caplog.text
+    assert "1 recipient(s)" in caplog.text

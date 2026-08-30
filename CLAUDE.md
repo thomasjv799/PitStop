@@ -114,6 +114,12 @@ WEB_HOST / WEB_PORT     dev server bind (default 127.0.0.1:8000)
 WEB_SOON_DAYS           "due soon" window in days (default 30)
 ```
 
+## Deployment
+
+- **Web app → Vercel.** `api/index.py` is the ASGI entrypoint, `api/requirements.txt` is a **web-only** dependency set (the bots' AI stack would blow past the 250 MB bundle cap for code the web app never calls), and `vercel.json` sets `includeFiles: "web/**"` — without it the app imports fine and then 500s on the first template render. Use Supabase's **transaction** pooler (port 6543) with `DB_POOL_MIN=0`: each invocation may be a fresh instance, and `ThreadedConnectionPool` otherwise opens connections eagerly on every cold start. Full notes in `docs/deploy-vercel.md`.
+- **Bots cannot run on Vercel.** `main.py` holds open Discord/Telegram connections; a serverless function is killed between requests. They need a process host.
+- **Cron stays on GitHub Actions** and is unaffected by where the web app lives.
+
 ## GitHub Actions
 
 - **Reminder Sweep** (`.github/workflows/reminder_sweep.yml`) — self-hosted runner, runs daily at 07:00 IST (01:30 UTC). Routes to Discord. Secrets: `DATABASE_URI`, `DISCORD_BOT_TOKEN`, `DISCORD_CHANNEL_ID`.
