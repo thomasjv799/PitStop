@@ -12,6 +12,15 @@ from utils.env import env_bool, env_int, env_str
 # Google's OIDC discovery document lives at a fixed, well-known address.
 GOOGLE_ISSUER = "https://accounts.google.com"
 
+# Set by the platform, not by us. On a serverless host there is no single
+# long-lived process: requests land on whichever instance is warm.
+SERVERLESS_MARKERS = ("VERCEL", "AWS_LAMBDA_FUNCTION_NAME", "FUNCTION_TARGET",
+                      "K_SERVICE")
+
+
+def on_serverless() -> bool:
+    return any(os.getenv(name) for name in SERVERLESS_MARKERS)
+
 # The five expiry columns, in the order the dashboard shows them. The short
 # label is the matrix column head; the long one is what the action dialog and
 # the reminder copy say.
@@ -98,16 +107,30 @@ class Settings:
         self.config_errors: list[str] = []
         self.config_warnings: list[str] = []
 
-        # A generated secret is fine for AUTH_MODE=dev — it only means sessions
-        # do not survive a restart — but a real sign-in must not silently
-        # invalidate its own state cookie mid-handshake, or between instances.
+        # Generating a secret is only safe when there is exactly one process
+        # that keeps it: a local run, where the cost is that sessions do not
+        # survive a restart. On a serverless host every instance would
+        # generate its own, so a cookie signed by one fails to verify on the
+        # next and the user is bounced back to sign-in on their second page.
+        # That holds in dev mode too — it is about how many processes exist,
+        # not about which auth mode is configured.
         secret = env_str("SESSION_SECRET")
         if not secret:
+            generate = (
+                'python -c "import secrets;print(secrets.token_urlsafe(32))"'
+            )
             if self.auth_mode != "dev":
                 self.config_errors.append(
-                    "SESSION_SECRET is required when AUTH_MODE is not 'dev'. "
-                    "Generate one with: "
-                    'python -c "import secrets;print(secrets.token_urlsafe(32))"'
+                    f"SESSION_SECRET is required when AUTH_MODE is not 'dev'. "
+                    f"Generate one with: {generate}"
+                )
+            elif on_serverless():
+                self.config_errors.append(
+                    "SESSION_SECRET is required on a serverless host. Each "
+                    "instance would otherwise generate its own, so a session "
+                    "cookie signed by one instance fails on the next and every "
+                    "page bounces back to sign-in. "
+                    f"Generate one with: {generate}"
                 )
             secret = secrets.token_urlsafe(32)
         self.session_secret = secret

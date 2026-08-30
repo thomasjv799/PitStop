@@ -131,6 +131,20 @@ a bad tuning value should not stop the app booting.
 `tests/test_env.py` imports the whole config with every setting set to the
 empty string, which is what the failure actually looked like.
 
+## Sessions on a serverless host
+
+`SESSION_SECRET` must be set explicitly anywhere the app runs as more than one
+process — which on Vercel is always. The app generates one when it is missing,
+and that is only safe for a single local process, where the cost is that
+sessions do not survive a restart. On serverless each instance generates its
+own, so a cookie signed by one instance fails to verify on the next: you sign
+in, and the second page you open bounces back to `/login`.
+
+This is about how many processes exist, not which auth mode is configured, so
+it is enforced in dev mode too. `web/config.py:on_serverless()` detects the
+platform from `VERCEL` / `AWS_LAMBDA_FUNCTION_NAME` / `FUNCTION_TARGET` /
+`K_SERVICE` and turns a generated secret into a blocking config error there.
+
 ## Logging and PII
 
 `utils/redact.py` keeps identifying data out of log lines. This matters most

@@ -133,3 +133,41 @@ def test_missing_database_uri_is_refused_too(monkeypatch):
     monkeypatch.setattr(client, "_POOL", None)
     with pytest.raises(client.DatabaseUnavailable, match="pooler"):
         client._get_pool()
+
+
+# ── session secret on serverless ─────────────────────────────────────────
+
+
+def test_generated_session_secret_is_refused_on_serverless(monkeypatch):
+    """Each instance would generate its own, so a cookie signed by one fails
+    on the next: sign in, then every subsequent page bounces to /login."""
+    import web.config as cfg
+
+    monkeypatch.setenv("AUTH_MODE", "dev")
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+    settings = cfg.Settings()
+    assert any("serverless" in e for e in settings.config_errors)
+
+
+def test_generated_session_secret_is_fine_for_a_local_process(monkeypatch):
+    import web.config as cfg
+
+    monkeypatch.setenv("AUTH_MODE", "dev")
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    for marker in cfg.SERVERLESS_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+    settings = cfg.Settings()
+    assert settings.config_errors == []
+    assert settings.session_secret
+
+
+def test_an_explicit_secret_satisfies_serverless(monkeypatch):
+    import web.config as cfg
+
+    monkeypatch.setenv("AUTH_MODE", "dev")
+    monkeypatch.setenv("SESSION_SECRET", "a-real-secret")
+    monkeypatch.setenv("VERCEL", "1")
+    settings = cfg.Settings()
+    assert settings.config_errors == []
+    assert settings.session_secret == "a-real-secret"
