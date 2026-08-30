@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from dotenv import load_dotenv
 
 from db import client as db
+from utils.email_digest import send_digest
 from utils.notify import notify
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,9 @@ def sweep() -> int:
         or os.environ.get("TELEGRAM_CHAT_ID")
     )
     sent = 0
+    # Collected for the email digest: the chat message goes out per document,
+    # but five due documents should be one email, not five.
+    fired: list[dict] = []
 
     for v in vehicles:
         for field, label in _FIELD_LABELS.items():
@@ -72,7 +76,19 @@ def sweep() -> int:
                 notify(_build_message(v, label, expiry, remaining), platform=platform, chat_id=chat_id)
                 db.log_reminder(v["id"], field, expiry, offset)
                 sent += 1
+                fired.append({
+                    "nickname": v.get("nickname") or v["registration_number"],
+                    "registration_number": v["registration_number"],
+                    "owner_name": v.get("owner_name") or "",
+                    "label": label,
+                    "expiry": expiry,
+                    "days": remaining,
+                })
                 logger.info("Sent: %s %s offset=%d", v["registration_number"], field, offset)
+
+    # After the loop, and deliberately last: the reminders are already sent
+    # and logged, so a failing mailbox must not take the sweep down with it.
+    send_digest(fired, today)
     return sent
 
 

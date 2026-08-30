@@ -35,6 +35,10 @@ jobs:
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
           CRON_NOTIFY_PLATFORM: discord
           CRON_NOTIFY_CHAT_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          # Email digest. Unset RESEND_API_KEY and the sweep simply skips it.
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.EMAIL_FROM }}
+          EMAIL_TO: ${{ vars.EMAIL_TO }}
         run: python -m cron.reminder_sweep
 
       # The sweep going quiet is invisible by design — no reminders is
