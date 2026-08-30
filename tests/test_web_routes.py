@@ -268,8 +268,38 @@ def test_costs_is_an_honest_stub(signed_in):
     assert "KL04AS1371" not in body
 
 
-def test_healthz_needs_no_session(client):
-    assert client.get("/healthz").json() == {"status": "ok"}
+def test_healthz_needs_no_session_and_names_only_variables(client):
+    body = client.get("/healthz").json()
+    # The suite leaves DATABASE_URI unset so the integration tests skip, so
+    # health is "degraded" here rather than "ok" — the app still serves.
+    assert body["status"] in ("ok", "degraded")
+    assert "blocking" not in body
+    # Whatever it reports, it must never carry a value.
+    assert "postgresql://" not in str(body)
+
+
+def test_healthz_reports_blocking_config_without_leaking_values(client, monkeypatch):
+    import web.app as app_module
+
+    monkeypatch.setattr(app_module.settings, "config_errors",
+                        ["SESSION_SECRET is required when AUTH_MODE is not 'dev'"])
+    body = client.get("/healthz").json()
+    assert body["status"] == "misconfigured"
+    assert "SESSION_SECRET" in body["blocking"][0]
+
+
+def test_a_blocking_misconfiguration_refuses_every_page_but_healthz(client, monkeypatch):
+    """An import-time raise would kill a serverless function before it could
+    answer; refusing with the reason is what makes it diagnosable."""
+    import web.app as app_module
+
+    monkeypatch.setattr(app_module.settings, "config_errors", ["SESSION_SECRET is required"])
+    assert client.get("/healthz").status_code == 200
+    for path in ("/login", "/", "/fleet"):
+        r = client.get(path)
+        assert r.status_code == 503
+        assert "not configured" in r.text
+        assert "SESSION_SECRET is required" in r.text
 
 
 # ── renew / snooze ───────────────────────────────────────────────────────

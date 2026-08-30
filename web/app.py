@@ -43,6 +43,35 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
+
+@app.middleware("http")
+async def _refuse_when_misconfigured(request: Request, call_next):
+    """Serve a readable diagnosis instead of half-working.
+
+    Import-time raises are invisible on a serverless host — the function dies
+    before it can answer, and the reason is only in a log you have to go find.
+    Refusing every request with the list of what is missing turns that into
+    something the browser tells you. Only variable *names* appear; never values.
+    """
+    if settings.config_errors and request.url.path != "/healthz":
+        items = "".join(f"<li><code>{e}</code></li>" for e in settings.config_errors)
+        return HTMLResponse(
+            "<!doctype html><meta charset=utf-8>"
+            "<title>PitStop — not configured</title>"
+            "<style>body{font:15px/1.6 system-ui,sans-serif;max-width:44rem;"
+            "margin:12vh auto;padding:0 1.5rem;color:#101828}"
+            "h1{font-size:20px;margin:0 0 .4rem}p{color:#667085}"
+            "li{margin:.5rem 0}code{background:#f4f5f8;padding:.15rem .4rem;"
+            "border-radius:4px;font-size:13px}</style>"
+            "<h1>PitStop is not configured</h1>"
+            "<p>The app started but is refusing to serve, because:</p>"
+            f"<ul>{items}</ul>"
+            "<p>Set these in your host's environment and redeploy — on Vercel, "
+            "environment changes only apply to the <em>next</em> build.</p>",
+            status_code=503,
+        )
+    return await call_next(request)
+
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.globals.update(
     provider_name=settings.oidc_provider_name,
@@ -509,7 +538,15 @@ def remove_recipient(recipient_id: int, user: dict = Depends(auth.require_admin)
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok"}
+    """Deliberately reachable even when misconfigured, and it names only the
+    missing variables — never their values."""
+    if settings.config_errors:
+        return {"status": "misconfigured", "blocking": settings.config_errors,
+                "warnings": settings.config_warnings}
+    if settings.config_warnings:
+        return {"status": "degraded", "warnings": settings.config_warnings,
+                "auth_mode": settings.auth_mode}
+    return {"status": "ok", "auth_mode": settings.auth_mode}
 
 
 # ── actions ──────────────────────────────────────────────────────────────

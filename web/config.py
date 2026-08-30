@@ -86,17 +86,55 @@ class Settings:
         # ever applied when creating the row.
         self.admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
 
-        # A generated secret is fine for AUTH_MODE=dev — it only means
-        # sessions do not survive a restart — but a real sign-in must not
-        # silently invalidate its own state cookie mid-handshake.
+        # Misconfiguration is collected, not raised. Raising here happens at
+        # import, which on a serverless host means the function dies before it
+        # can say why — an opaque 500 with the reason only in a log you have to
+        # go find. The app starts, refuses to serve, and explains itself.
+        # Two kinds of wrong, and they deserve different treatment.
+        #   errors   — cannot serve safely at all (auth and session config).
+        #              Every request is refused.
+        #   warnings — will fail when it is used, not before. DATABASE_URI is
+        #              read lazily, and the tests deliberately leave it unset so
+        #              the integration suite skips; blocking on it would mean
+        #              the app refuses to start in its own test environment.
+        self.config_errors: list[str] = []
+        self.config_warnings: list[str] = []
+
+        # A generated secret is fine for AUTH_MODE=dev — it only means sessions
+        # do not survive a restart — but a real sign-in must not silently
+        # invalidate its own state cookie mid-handshake, or between instances.
         secret = os.getenv("SESSION_SECRET", "")
         if not secret:
             if self.auth_mode != "dev":
-                raise RuntimeError(
-                    "SESSION_SECRET is required when AUTH_MODE is not 'dev'"
+                self.config_errors.append(
+                    "SESSION_SECRET is required when AUTH_MODE is not 'dev'. "
+                    "Generate one with: "
+                    'python -c "import secrets;print(secrets.token_urlsafe(32))"'
                 )
             secret = secrets.token_urlsafe(32)
         self.session_secret = secret
+
+        if self.auth_mode not in ("dev", "google", "oidc"):
+            self.config_errors.append(
+                f"AUTH_MODE={self.auth_mode!r} is not one of: dev, google"
+            )
+        if self.is_oidc and not self.oidc_client_id:
+            self.config_errors.append(
+                f"OIDC_CLIENT_ID is required when AUTH_MODE={self.auth_mode}"
+            )
+        if self.is_oidc and not self.oidc_client_secret:
+            self.config_errors.append(
+                f"OIDC_CLIENT_SECRET is required when AUTH_MODE={self.auth_mode}"
+            )
+        if self.is_oidc and not self.admin_email:
+            self.config_errors.append(
+                "ADMIN_EMAIL is required when AUTH_MODE is not 'dev' — without "
+                "it no account can ever be approved, because there is no admin"
+            )
+        if not os.getenv("DATABASE_URI"):
+            self.config_warnings.append(
+                "DATABASE_URI is not set — pages that read the fleet will fail"
+            )
 
         self.session_https_only = _truthy(os.getenv("SESSION_HTTPS_ONLY", "0"))
         self.session_max_age = int(os.getenv("SESSION_MAX_AGE", str(60 * 60 * 12)))
