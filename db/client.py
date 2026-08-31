@@ -269,8 +269,15 @@ def log_reminder(
     sql = """
         INSERT INTO reminder_log (vehicle_id, expiry_field, expiry_date, trigger_offset)
         VALUES (%(vid)s, %(field)s, %(edate)s, %(offset)s)
-        ON CONFLICT DO NOTHING
+        ON CONFLICT (vehicle_id, expiry_field, expiry_date, trigger_offset)
+        DO NOTHING
     """
+    # Naming the constraint matters. A bare ON CONFLICT DO NOTHING swallows
+    # *any* unique violation, including one on the primary key — which is
+    # exactly what hid a broken identity sequence: every insert drew an id
+    # that already existed, collided, and was silently discarded while the
+    # sweep reported success and the reminders went out unlogged. Targeting
+    # the intended constraint means a PK collision raises instead.
     with _conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, {

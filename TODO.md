@@ -70,6 +70,16 @@ page load** after approval at `/admin/users`, and bounces straight back to
 
 ---
 
+## Run after any database restore
+
+```bash
+psql "$DATABASE_URI" -f db/migrations/008_resync_identity_sequences.sql
+```
+
+A restore writes explicit ids without advancing the identity sequences, and
+inserts then collide on the primary key. Idempotent, so running it when it is
+not needed costs nothing.
+
 ## Open issues
 
 | | | |

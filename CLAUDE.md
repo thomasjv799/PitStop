@@ -115,6 +115,25 @@ WEB_HOST / WEB_PORT     dev server bind (default 127.0.0.1:8000)
 WEB_SOON_DAYS           "due soon" window in days (default 30)
 ```
 
+## Identity sequences after a restore
+
+Rows restored from the DropHunter backup carry explicit ids, which does **not**
+advance the identity sequence. `reminder_log` held ids up to 40 while its
+sequence sat at 3, so every insert drew an id that already existed and collided
+on the primary key.
+
+It failed silently because the insert used `ON CONFLICT DO NOTHING` with no
+target, and that swallows *any* unique violation. The sweep sent its reminders,
+logged "2 reminder(s) sent", and wrote nothing — so the same reminders would
+have fired again every day, forever.
+
+Two guards now:
+
+- `db/client.py` names the intended constraint, so a primary-key collision
+  raises instead of disappearing. Pinned by a test.
+- `db/migrations/008_resync_identity_sequences.sql` re-syncs every sequence to
+  `max(id)`. It is idempotent — **run it after any restore or bulk import.**
+
 ## Reading environment variables
 
 Always through `utils/env.py` (`env_str`, `env_int`, `env_bool`, `env_list`),

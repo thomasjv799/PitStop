@@ -66,3 +66,23 @@ def test_dsn_warning_tolerates_nothing():
 
     assert client.dsn_warning("") is None
     assert client.dsn_warning(None) is None
+
+
+def test_reminder_log_insert_names_its_conflict_target():
+    """A bare `ON CONFLICT DO NOTHING` swallows *any* unique violation,
+    including one on the primary key.
+
+    That is how a broken identity sequence stayed invisible: rows restored
+    from a backup with explicit ids left the sequence behind, so every insert
+    drew an id that already existed, collided, and was silently discarded —
+    while the sweep reported success and the reminders went out unlogged,
+    ready to fire again the next day.
+    """
+    import inspect
+
+    from db import client
+
+    source = inspect.getsource(client.log_reminder)
+    assert "ON CONFLICT (vehicle_id, expiry_field, expiry_date, trigger_offset)" in source
+    # The bare form must not come back.
+    assert "ON CONFLICT DO NOTHING" not in source
