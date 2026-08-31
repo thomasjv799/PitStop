@@ -8,6 +8,7 @@ sweep collects what it sent and this module posts a single digest at the end.
 touches the network.
 """
 
+import hashlib
 import logging
 import os
 from datetime import date
@@ -275,6 +276,24 @@ def resolve_recipients() -> list[str]:
     return env_recipients()
 
 
+def idempotency_key(recipients: list[str], subject: str, text: str,
+                    today: Optional[date] = None) -> str:
+    """Stable for an identical digest, different for a changed one.
+
+    Keying on the date alone was wrong in both directions. Resend returns
+    409 Conflict when a key is reused with a *different* payload, so adding a
+    recipient — or the fleet changing between two runs on the same day — turned
+    a legitimate send into a hard error. Hashing the payload keeps the property
+    that actually matters (a re-run of the *same* digest does not send twice)
+    without blocking a genuinely different one.
+    """
+    day = (today or date.today()).isoformat()
+    digest = hashlib.sha256(
+        "\x1f".join([day, ",".join(sorted(recipients)), subject, text]).encode()
+    ).hexdigest()[:16]
+    return f"pitstop-digest-{day}-{digest}"
+
+
 def send_digest(items: Iterable[dict], today: Optional[date] = None) -> bool:
     """Post the digest to Resend. Returns whether anything was sent.
 
@@ -303,14 +322,23 @@ def send_digest(items: Iterable[dict], today: Optional[date] = None) -> bool:
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                # One digest per recipient per day: a retried run must not
-                # produce a second email.
-                "Idempotency-Key": f"pitstop-digest-{(today or date.today()).isoformat()}",
+                # Re-running the same sweep must not send twice; a genuinely
+                # different digest on the same day must still go out.
+                "Idempotency-Key": idempotency_key(recipients, subject, text, today),
             },
             json={"from": sender, "to": recipients, "subject": subject,
                   "html": html, "text": text},
             timeout=15,
         )
+        if resp.status_code == 409:
+            # Same key, different payload. With a content-derived key this
+            # should not happen; if it does, say what it means rather than
+            # dumping a traceback that reads like a network failure.
+            logger.warning(
+                "Resend rejected the digest as a duplicate (409). An identical "
+                "key was already used with different content today."
+            )
+            return False
         resp.raise_for_status()
     except Exception:
         logger.exception("Could not send the reminder digest")

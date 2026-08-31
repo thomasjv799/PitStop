@@ -119,8 +119,8 @@ def test_send_posts_one_digest_for_many_reminders(configured):
     assert body["html"] and body["text"]
     headers = post.call_args.kwargs["headers"]
     assert headers["Authorization"] == "Bearer re_test"
-    # A re-run on the same day must not produce a second email.
-    assert headers["Idempotency-Key"] == "pitstop-digest-2026-08-30"
+    # A re-run of the same digest must not send twice.
+    assert headers["Idempotency-Key"].startswith("pitstop-digest-2026-08-30-")
 
 
 def test_send_splits_multiple_recipients(configured, monkeypatch):
@@ -306,3 +306,53 @@ def test_recipient_addresses_are_never_logged(configured, caplog, monkeypatch):
         ed.send_digest([item()], TODAY)
     assert "secret.person@example.com" not in caplog.text
     assert "1 recipient(s)" in caplog.text
+
+
+# ── idempotency ──────────────────────────────────────────────────────────
+
+
+def test_the_same_digest_reuses_its_key():
+    a = ed.idempotency_key(["a@x.com"], "subject", "body", TODAY)
+    b = ed.idempotency_key(["a@x.com"], "subject", "body", TODAY)
+    assert a == b
+
+
+def test_recipient_order_does_not_change_the_key():
+    a = ed.idempotency_key(["a@x.com", "b@x.com"], "s", "t", TODAY)
+    b = ed.idempotency_key(["b@x.com", "a@x.com"], "s", "t", TODAY)
+    assert a == b
+
+
+@pytest.mark.parametrize("recipients, subject, text", [
+    (["a@x.com", "b@x.com"], "subject", "body"),   # a recipient was added
+    (["a@x.com"], "different subject", "body"),    # the fleet changed
+    (["a@x.com"], "subject", "different body"),
+])
+def test_a_changed_digest_gets_a_new_key(recipients, subject, text):
+    """Resend answers 409 when a key is reused with a different payload.
+    Keying on the date alone meant adding a recipient turned a legitimate
+    send into a hard error — which is exactly what happened in production."""
+    base = ed.idempotency_key(["a@x.com"], "subject", "body", TODAY)
+    assert ed.idempotency_key(recipients, subject, text, TODAY) != base
+
+
+def test_a_different_day_gets_a_new_key():
+    a = ed.idempotency_key(["a@x.com"], "s", "t", date(2026, 8, 30))
+    b = ed.idempotency_key(["a@x.com"], "s", "t", date(2026, 8, 31))
+    assert a != b
+
+
+def test_a_409_is_reported_plainly_rather_than_as_a_traceback(configured, caplog):
+    import logging
+
+    class Conflict:
+        status_code = 409
+        def raise_for_status(self):
+            raise AssertionError("should not be reached for a 409")
+
+    with patch("db.client.list_notification_recipients", return_value=[]), \
+         patch("utils.email_digest.requests.post", return_value=Conflict()), \
+         caplog.at_level(logging.WARNING):
+        assert ed.send_digest([item()], TODAY) is False
+    assert "duplicate" in caplog.text.lower()
+    assert "Traceback" not in caplog.text
