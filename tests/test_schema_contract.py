@@ -79,10 +79,13 @@ def test_reminder_log_insert_names_its_conflict_target():
     ready to fire again the next day.
     """
     import inspect
+    import re
 
     from db import client
 
     source = inspect.getsource(client.log_reminder)
-    assert "ON CONFLICT (vehicle_id, expiry_field, expiry_date, trigger_offset)" in source
-    # The bare form must not come back.
-    assert "ON CONFLICT DO NOTHING" not in source
+    # Only the SQL, not the comments — which necessarily quote the bare form
+    # in order to warn about it.
+    sql = re.search(r'"""(.*?)"""', source, re.S).group(1)
+    assert "ON CONFLICT (vehicle_id, expiry_field, expiry_date, trigger_offset)" in sql
+    assert not re.search(r"ON\s+CONFLICT\s+DO\s+NOTHING", sql)
