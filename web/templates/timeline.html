@@ -13,7 +13,7 @@
 </div>
 
 {% if rows %}
-<div class="card">
+<div class="card scroll-x timeline-card">
   <div class="tl-axis">
     <span></span>
     <div class="rail">
@@ -29,13 +29,13 @@
       <span class="vname">{{ row.nickname }}</span>
       <span class="vreg">{{ row.registration_number }}</span>
     </a>
-    <div class="rail">
+    <div class="rail" style="height:{{ row.marks | length * 30 }}px">
       <span class="nowline" style="left:{{ today_position }}%"></span>
       {% for m in row.marks %}
-      <span class="mark {{ 'over' if m.status == 'overdue' else m.status }}" style="left:{{ m.left }}%"
+      <a href="/vehicles/{{ row.registration_number }}" class="mark {{ 'over' if m.status == 'overdue' else m.status }}" style="left:{{ m.left }}%;top:{{ loop.index0 * 30 + 3 }}px;{% if m.left > 85 %}transform:translateX(-100%);{% endif %}"
             title="{{ m.long_label }} · {{ m.date_text }} · {{ m.days_text }}">
         {{ m.label }}{% if m.status == 'snoozed' %} · snoozed{% endif %}
-      </span>
+      </a>
       {% endfor %}
     </div>
   </div>

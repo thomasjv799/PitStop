@@ -5,6 +5,7 @@
 {% block main %}
 <div class="pagehead">
   <div>
+    <span class="eyebrow">YOUR FLEET, AT A GLANCE</span>
     <h1>{{ greeting }}</h1>
     <div class="sub">
       {% if stats.attention %}
@@ -29,9 +30,10 @@
   <a class="tile ok" href="/timeline"><b>{{ stats.total - stats.attention }}</b><span>clear</span></a>
 </div>
 
+<div class="dashboard-layout">
 <div class="card queue">
   <div class="card-head">
-    <h2>Needs attention</h2>
+    <h2>Needs attention <span class="count-chip">{{ queue | length }}</span></h2>
     <span class="sub">{{ queue | length }} document{{ '' if queue | length == 1 else 's' }} · nearest expiry first</span>
   </div>
 
@@ -67,6 +69,26 @@
       <p>Every document is more than {{ soon_days }} days out.</p>
     </div>
   {% endif %}
+</div>
+<aside class="dashboard-aside">
+  <section class="card fleet-health">
+    <span class="eyebrow">FLEET READINESS</span>
+    {% set clear_count = stats.total - stats.attention %}
+    {% set readiness = (100 * clear_count / stats.total) | round | int if stats.total else 0 %}
+    <div class="readiness-number">{{ readiness }}<span>%</span></div>
+    <p>{{ clear_count }} of {{ stats.total }} vehicles clear of upcoming renewals.</p>
+    <progress max="{{ stats.total if stats.total else 1 }}" value="{{ clear_count }}" aria-label="Vehicles clear of upcoming renewals"></progress>
+    <div class="health-key"><span>Needs attention</span><strong>{{ stats.attention }}</strong></div>
+    <div class="health-key"><span>Clear</span><strong>{{ clear_count }}</strong></div>
+    <a href="/fleet" class="text-link">Review your fleet <span aria-hidden="true">→</span></a>
+  </section>
+  <section class="planning-card">
+    <span class="eyebrow">LOOKING AHEAD</span>
+    <h2>Make room for<br>the next renewal.</h2>
+    <p>See document deadlines together and plan your next few months.</p>
+    <a class="btn" href="/timeline">Explore timeline <span aria-hidden="true">↗</span></a>
+  </section>
+</aside>
 </div>
 {% endblock %}
 

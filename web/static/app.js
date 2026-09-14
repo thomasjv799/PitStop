@@ -41,6 +41,19 @@
   });
 
   // ── dialogs ────────────────────────────────────────────────────────────
+  var fleetSearch = document.getElementById("fleet-search");
+  if (fleetSearch) {
+    fleetSearch.addEventListener("input", function () {
+      var query = fleetSearch.value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+      var visible = 0;
+      document.querySelectorAll("[data-vehicle-row]").forEach(function (row) {
+        row.hidden = !row.dataset.search.toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, "").includes(query);
+        if (!row.hidden) visible++;
+      });
+      document.getElementById("fleet-count").textContent = visible + (visible === 1 ? " vehicle" : " vehicles");
+      document.getElementById("fleet-no-results").hidden = visible !== 0;
+    });
+  }
   // One document-action dialog is reused across the dashboard, the fleet
   // matrix and the vehicle page: a click on any cell fills it from that
   // cell's data-* attributes and points the three forms at the right
@@ -63,12 +76,14 @@
   function show(el) {
     if (!el) return;
     el.hidden = false;
+    document.body.style.overflow = "hidden";
     var first = el.querySelector("input:not([type=hidden]):not([type=radio])");
     if (first) first.focus();
   }
 
   function closeAll() {
     [dialog, deleteDialog].forEach(function (el) { if (el) el.hidden = true; });
+    document.body.style.overflow = "";
     if (lastTrigger) { lastTrigger.focus(); lastTrigger = null; }
   }
 
@@ -174,5 +189,18 @@
 
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape" && anyOpen()) closeAll();
+    if (event.key === "Tab" && anyOpen()) {
+      var activeDialog = [dialog, deleteDialog].find(function (el) { return el && !el.hidden; });
+      var controls = Array.from(activeDialog.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]'))
+        .filter(function (el) { return el.getClientRects().length > 0; });
+      var first = controls[0];
+      var last = controls[controls.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || !activeDialog.contains(document.activeElement))) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !activeDialog.contains(document.activeElement))) {
+        event.preventDefault(); first.focus();
+      }
+    }
   });
 })();
