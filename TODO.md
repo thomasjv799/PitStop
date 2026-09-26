@@ -85,13 +85,15 @@ not needed costs nothing.
 | | | |
 |---|---|---|
 | [#17](https://github.com/thomasjv799/PitStop/issues/17) | **The bots have nowhere to run** | Their host was the homelab box. They cannot go on Vercel — they hold open connections and a serverless function is killed between requests. Needs Railway, Fly.io, a VPS, or the rebuilt box. The `Dockerfile` already works; it needs `DATABASE_URI`, `DISCORD_BOT_TOKEN`, `GROQ_API_KEY`. |
-| [#11](https://github.com/thomasjv799/PitStop/issues/11) | Sweep does not write `ops.job_runs` | Genuinely blocked: the `ops` schema does not exist yet, and the table is shared across repos so its shape should be settled in one place first. |
-| [#5](https://github.com/thomasjv799/PitStop/issues/5) | Structured Output | Pre-existing. |
 | [#4](https://github.com/thomasjv799/PitStop/issues/4) | Add Omniroute support | Pre-existing. |
 
 ---
 
 ## Smaller things, when convenient
+
+Completed 26 Sep 2026: #5 adds validated Groq JSON output with bounded retries;
+#11 records sweep outcomes and counts in the now-existing shared `ops.job_runs`.
+The older operational notes above are historical and have not been re-audited.
 
 - **`/costs` is an honest stub.** When it lands it needs a `vehicle_costs`
   table (vehicle_id, expiry_field, amount, paid_on) and an optional amount

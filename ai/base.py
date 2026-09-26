@@ -2,6 +2,10 @@ from abc import ABC, abstractmethod
 
 
 class AIProvider(ABC):
+    def generate_structured(self, prompt: str, schema: dict) -> dict:
+        """Generate JSON validated against the supplied JSON Schema."""
+        raise NotImplementedError("This provider does not support structured output")
+
     @abstractmethod
     def generate_text(self, prompt: str) -> str:
         """Generate plain text for a prompt (used for summarisation)."""

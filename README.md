@@ -258,6 +258,33 @@ wants revisiting.
 
 ---
 
+## Structured output and sweep history
+
+The Groq provider supports `generate_structured(prompt, schema)`: it requests
+JSON, validates the returned object against a JSON Schema, and retries once if
+the response is malformed, truncated or fails validation. Exhausted retries
+raise `StructuredOutputError` without including response contents. The agent's
+final response after tool execution uses the same validation, while tool calls
+continue to use Groq's native tool interface. Retry token usage is included in
+the reported totals. This uses JSON object mode with local validation, not a
+claim of server-enforced strict schemas for Llama. See
+[Groq's structured output documentation](https://console.groq.com/docs/structured-outputs).
+
+Every completed reminder sweep attempts to insert one row into the existing
+shared `ops.job_runs` table as `pitstop.reminder_sweep`. Rows include UTC start
+and finish times, `ok`/`error`, an exception class on failure, and JSON counts:
+`vehicles_checked`, `reminders_sent`, and `emails_sent`. Email counts are digest
+requests successfully accepted by Resend, not recipient deliveries. Partial
+counts survive a failed sweep; no-op runs are recorded too. Recording failures
+are logged without credentials or personal data and never fail the sweep or
+mask its original error. A forcibly terminated process cannot write a final row.
+
+The table is owned by the shared operational-report setup in
+[OneRing issue #5](https://github.com/thomasjv799/OneRingToRuleThemAll/issues/5).
+The database role needs schema usage and insert access. PitStop does not create
+or alter this shared table at runtime. The current Supabase table was verified
+to match the contract; no new migration is required there.
+
 ## License
 
 See [LICENSE.txt](LICENSE.txt).

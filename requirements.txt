@@ -3,6 +3,7 @@ requests
 python-telegram-bot>=20.0
 discord.py>=2.0
 groq
+jsonschema>=4.18,<5
 langgraph
 langchain-core
 python-dotenv

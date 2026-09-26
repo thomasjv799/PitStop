@@ -3,10 +3,15 @@ import os
 import re
 
 from groq import Groq
+from jsonschema import Draft202012Validator, ValidationError
 
 from ai.base import AIProvider
 
 _MODEL = "llama-3.3-70b-versatile"
+
+
+class StructuredOutputError(ValueError):
+    """The model could not produce a valid response (payload never logged)."""
 
 
 class GroqProvider(AIProvider):
@@ -20,7 +25,51 @@ class GroqProvider(AIProvider):
         )
         return response.choices[0].message.content
 
+    def generate_structured(self, prompt: str, schema: dict) -> dict:
+        """Llama supports JSON mode; enforce the schema locally, with one retry."""
+        result, _ = self._structured([{"role": "user", "content": prompt}], schema)
+        return result
+
+    def _structured(self, messages: list[dict], schema: dict) -> tuple[dict, dict]:
+        Draft202012Validator.check_schema(schema)
+        validator = Draft202012Validator(schema)
+        instructions = {
+            "role": "system",
+            "content": "Return only a JSON object conforming to this JSON Schema: " + json.dumps(schema),
+        }
+        request_messages = [instructions, *messages]
+        usage = {"input_tokens": 0, "output_tokens": 0}
+        for attempt in range(2):
+            response = self._client.chat.completions.create(
+                model=_MODEL, messages=request_messages,
+                response_format={"type": "json_object"},
+            )
+            if response.usage:
+                usage["input_tokens"] += response.usage.prompt_tokens
+                usage["output_tokens"] += response.usage.completion_tokens
+            try:
+                if response.choices[0].finish_reason == "length":
+                    raise ValueError("Truncated response")
+                value = json.loads(response.choices[0].message.content or "")
+                if not isinstance(value, dict):
+                    raise ValueError("Expected an object")
+                validator.validate(value)
+                return value, usage
+            except (ValueError, ValidationError):
+                if attempt:
+                    raise StructuredOutputError("Invalid structured response after two attempts") from None
+                request_messages = [*request_messages, {
+                    "role": "user", "content": "The response did not validate. Return a complete JSON object matching the schema exactly.",
+                }]
+        raise AssertionError("Unreachable")
+
     def chat_with_tools(self, messages: list[dict], tools: list[dict]) -> dict:
+        if not tools:
+            value, usage = self._structured(messages, {
+                "type": "object", "properties": {"text": {"type": "string", "minLength": 1}},
+                "required": ["text"], "additionalProperties": False,
+            })
+            return {"text": value["text"], "usage": usage}
         import groq as groq_module
         try:
             response = self._client.chat.completions.create(

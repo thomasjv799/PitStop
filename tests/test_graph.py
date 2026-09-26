@@ -25,7 +25,7 @@ def test_groq_provider_returns_text(monkeypatch):
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.choices[0].message.tool_calls = None
-    mock_response.choices[0].message.content = "Insurance expires in 30 days."
+    mock_response.choices[0].message.content = '{"text": "Insurance expires in 30 days."}'
     mock_response.usage.prompt_tokens = 10
     mock_response.usage.completion_tokens = 20
     mock_client.chat.completions.create.return_value = mock_response
@@ -50,7 +50,7 @@ def test_groq_provider_returns_tool_calls(monkeypatch):
     mock_response.usage.completion_tokens = 8
     mock_client.chat.completions.create.return_value = mock_response
     provider._client = mock_client
-    result = provider.chat_with_tools([{"role": "user", "content": "list all"}], [])
+    result = provider.chat_with_tools([{"role": "user", "content": "list all"}], [{"type": "function", "function": {"name": "query_vehicles"}}])
     assert "tool_calls" in result
     assert result["tool_calls"][0] == {"name": "query_vehicles", "arguments": {"filter": "all"}}
 

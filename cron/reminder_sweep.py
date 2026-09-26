@@ -9,6 +9,7 @@ from utils import redact
 from utils.env import env_str
 from utils.email_digest import send_digest
 from utils.notify import notify
+from utils.job_runs import track_run
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +48,14 @@ def _build_message(vehicle: dict, label: str, expiry: date, remaining: int) -> s
 
 
 def sweep() -> int:
+    with track_run("pitstop.reminder_sweep") as counts:
+        return _sweep(counts)
+
+
+def _sweep(counts: dict) -> int:
     today    = date.today()
     vehicles = db.get_all_vehicles_with_expiry()
+    counts["vehicles_checked"] = len(vehicles)
     platform = env_str("CRON_NOTIFY_PLATFORM", "discord")
     chat_id  = (
         env_str("CRON_NOTIFY_CHAT_ID")
@@ -78,6 +85,7 @@ def sweep() -> int:
                     continue
                 remaining = (expiry - today).days
                 notify(_build_message(v, label, expiry, remaining), platform=platform, chat_id=chat_id)
+                counts["reminders_sent"] += 1
                 db.log_reminder(v["id"], field, expiry, offset)
                 sent += 1
                 fired.append({
@@ -97,7 +105,7 @@ def sweep() -> int:
 
     # After the loop, and deliberately last: the reminders are already sent
     # and logged, so a failing mailbox must not take the sweep down with it.
-    send_digest(fired, today)
+    counts["emails_sent"] = int(send_digest(fired, today) is True)
     return sent
 
 
